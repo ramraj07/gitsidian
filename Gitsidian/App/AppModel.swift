@@ -12,6 +12,7 @@ final class AppModel {
     private let lastVaultKey = "lastVault"
 
     init() {
+        Keychain.migrateToSharedGroup()
         if let d = UserDefaults.standard.data(forKey: vaultsKey),
            let v = try? JSONDecoder().decode([VaultConfig].self, from: d) {
             vaults = v
@@ -59,6 +60,16 @@ final class AppModel {
         UserDefaults.standard.set(v.id.uuidString, forKey: lastVaultKey)
     }
 
+    /// gitsidian://open?vault=…&path=… (from widget taps and `gitsidian.note()` buttons).
+    func handle(_ url: URL) {
+        guard let link = DeepLink.parse(url) else { return }
+        if let id = link.vault, session?.config.id != id {
+            guard let v = vaults.first(where: { $0.id == id }) else { return }
+            open(v)
+        }
+        session?.openDeepLink(link.path)
+    }
+
     func closeVault() {
         session = nil
         UserDefaults.standard.removeObject(forKey: lastVaultKey)
@@ -69,5 +80,6 @@ final class AppModel {
         vaults.removeAll { $0.id == v.id }
         persist()
         try? FileManager.default.removeItem(at: SyncEngine.vaultDirectory(v.id))
+        if WidgetStore.shared.replace(vault: v.id, with: []) { WidgetReload.all() }
     }
 }

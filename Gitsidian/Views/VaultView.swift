@@ -15,16 +15,23 @@ final class VaultUI {
     var newNoteName = ""
     var newFolderParent: String?
     var newFolderName = ""
+    var newWidgetFolder: String?
+    var newWidgetName = ""
     var moving: String?
     var deleting: String?
 
     func startRename(_ path: String) {
         let name = (path as NSString).lastPathComponent
-        renameText = FileKind(path: path) == .markdown ? (name as NSString).deletingPathExtension : name
+        switch FileKind(path: path) {
+        case .markdown: renameText = (name as NSString).deletingPathExtension
+        case .widget: renameText = WidgetFile.displayName(name)
+        default: renameText = name
+        }
         renaming = path
     }
     func startNewNote(in folder: String) { newNoteName = ""; newNoteFolder = folder }
     func startNewFolder(in parent: String) { newFolderName = ""; newFolderParent = parent }
+    func startNewWidget(in folder: String) { newWidgetName = ""; newWidgetFolder = folder }
 }
 
 extension Binding where Value == Bool {
@@ -116,6 +123,18 @@ struct VaultView: View {
         } message: {
             Text(ui.newNoteFolder.map { $0.isEmpty ? "In vault root" : "In \($0)" } ?? "")
         }
+        .alert("New widget", isPresented: Binding(present: $ui.newWidgetFolder)) {
+            TextField("Widget", text: $ui.newWidgetName)
+            Button("Create") {
+                let name = ui.newWidgetName.trimmingCharacters(in: .whitespaces)
+                if let p = session.createWidget(in: ui.newWidgetFolder ?? "", name: name.isEmpty ? nil : name) {
+                    session.open(p); ui.showSidebar = false
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Creates a .gitsidian.widget file you can add to the Home Screen.")
+        }
         .alert("New folder", isPresented: Binding(present: $ui.newFolderParent)) {
             TextField("Untitled", text: $ui.newFolderName)
             Button("Create") {
@@ -160,7 +179,11 @@ struct VaultView: View {
     private var title: String {
         guard let p = session.currentPath else { return session.config.displayName }
         let name = (p as NSString).lastPathComponent
-        return FileKind(path: p) == .markdown ? (name as NSString).deletingPathExtension : name
+        switch FileKind(path: p) {
+        case .markdown: return (name as NSString).deletingPathExtension
+        case .widget: return WidgetFile.displayName(name)
+        default: return name
+        }
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
@@ -195,6 +218,7 @@ struct VaultView: View {
         Menu {
             Button { Task { await session.sync() } } label: { Label("Sync now", systemImage: "arrow.triangle.2.circlepath") }
             Button { ui.showSearch = true } label: { Label("Search in all files", systemImage: "text.magnifyingglass") }
+            Button { ui.startNewWidget(in: currentFolder) } label: { Label("New widget", systemImage: "square.grid.2x2") }
             if let p = session.currentPath {
                 Section {
                     Button { ui.startRename(p) } label: { Label("Rename", systemImage: "pencil") }

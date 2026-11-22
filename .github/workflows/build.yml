@@ -17,5 +17,5 @@ jobs:
           set -o pipefail
           xcodebuild -project Gitsidian.xcodeproj -scheme Gitsidian \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
-            -configuration Debug CODE_SIGNING_ALLOWED=NO build | tee build.log | grep -E "error:|warning: .*(Gitsidian/)|BUILD (SUCCEEDED|FAILED)" || true
+            -configuration Debug CODE_SIGNING_ALLOWED=NO build | tee build.log | grep -E "error:|warning: .*(Gitsidian/|GitsidianWidget/|Shared/)|BUILD (SUCCEEDED|FAILED)" || true
           grep -q "BUILD SUCCEEDED" build.log
