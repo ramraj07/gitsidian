@@ -56,7 +56,7 @@ Container.progress(start, end)      live bar between two dates
 Container.gauge(value, {min, max, label})
 Container.list([{title, detail, url}])        rows with url are tappable
 Container.chart({type: "bar"|"line"|"area", data: [{x, y}], color})
-Container.button(label, url)        opens any URL scheme (gitsidian.note(), https, maps://, shortcuts://…)
+Container.button(label, url)        opens any URL scheme (gitsidian.note(), https, maps://, shortcuts://…); Gitsidian flashes briefly
 Container.button(label, {page: n})  switches page in place, no app launch
 Container.spacer()
 ```

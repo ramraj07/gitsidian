@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 
 @Observable @MainActor
 final class AppModel {
@@ -62,6 +63,11 @@ final class AppModel {
 
     /// gitsidian://open?vault=…&path=… (from widget taps and `gitsidian.note()` buttons).
     func handle(_ url: URL) {
+        // Widget links to other apps (maps://, tel:, https, shortcuts://…) arrive here first: pass them on.
+        guard url.scheme?.lowercased() == DeepLink.scheme else {
+            UIApplication.shared.open(url)
+            return
+        }
         guard let link = DeepLink.parse(url) else { return }
         if let id = link.vault, session?.config.id != id {
             guard let v = vaults.first(where: { $0.id == id }) else { return }
