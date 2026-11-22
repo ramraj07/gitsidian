@@ -16,6 +16,7 @@ An iPhone app that opens a GitHub repository as an Obsidian-style vault. You bro
   - Back/forward navigation history. Reopens the last note.
   - Renaming a note updates `[[links]]` that point to it (can be turned off).
   - Images and PDFs can be viewed. Other files can be shared/opened in another app.
+- **Home-screen widgets.** Any `*.gitsidian.widget` file in a vault can be a Home Screen widget: a small JavaScript program (same API as [Kondai](https://github.com/ramraj07/kondai)) with pages, charts, canvas drawings, live timers and buttons that open notes. The widget pulls the file straight from GitHub, so a commit from an agent updates it. Live preview in the app. See [`docs/widgets.md`](docs/widgets.md); give agents [`docs/agent-manual.md`](docs/agent-manual.md).
 - **Sync as batched commits.**
   - Typing saves to disk right away. After you stop editing (default 30s), and whenever the app goes to the background, all changes go up as **one commit** (`vault backup: 2026-11-22 14:03 (3 files)` plus the list of files).
   - Every sync first pulls. Remote changes to files you didn't touch are applied. When both sides edited the same file, a line-based **3-way merge** runs. If the same lines changed on both sides, the remote version wins the original path and your version is kept as `Note (conflict 2026-11-22 1403).md`. Nothing is ever silently lost.
@@ -35,6 +36,10 @@ An iPhone app that opens a GitHub repository as an Obsidian-style vault. You bro
 | Editor (UITextView + highlighter + keyboard toolbar) | `Gitsidian/Editor/` |
 | Reading view (block parser + SwiftUI renderer) | `Gitsidian/Markdown/` |
 | Screens | `Gitsidian/Views/` |
+| Widget file preview / starter template | `Gitsidian/Widgets/`, `Shared/WidgetTemplate.swift` |
+| Widget script runtime (JavaScriptCore → SwiftUI, from Kondai) | `Shared/WidgetRuntime/` |
+| App Group cache, deep links, shared Keychain token | `Shared/WidgetShared.swift`, `Shared/Keychain.swift` |
+| WidgetKit extension (file picker, GitHub refresh, page buttons) | `GitsidianWidget/` |
 
 Each vault is a plain folder in the app's Application Support directory, plus a `state.json` holding the last synced commit, tree, and path→blob-sha map. Commits are built with the Git Data API (create blobs → create tree on `base_tree` → create commit → fast-forward the ref), so no git binary or libgit2 is needed. Commits are attributed to the token's GitHub user.
 
@@ -43,10 +48,10 @@ Each vault is a plain folder in the app's Application Support directory, plus a 
 Needs Xcode 16+ and iOS 17+.
 
 1. Open `Gitsidian.xcodeproj`.
-2. Under *Signing & Capabilities*, choose your team, and change the bundle id if `com.gitsidian.app` is taken.
+2. Under *Signing & Capabilities*, choose your team for both the **Gitsidian** and **GitsidianWidget** targets. If you change the bundle id from `com.gitsidian.app`, keep the widget's as `<app id>.widget`, and if you change the App Group (`group.com.gitsidian.app`), change it in both `Config/*.entitlements` and `AppGroup.identifier` in `Shared/WidgetShared.swift`.
 3. Run on your iPhone.
 
-The project uses Xcode 16's synchronized folders, so any file added under `Gitsidian/` is picked up automatically. CI (`.github/workflows/build.yml`) builds for the simulator on every push.
+The project uses Xcode 16's synchronized folders, so any file added under `Gitsidian/`, `Shared/` (both targets) or `GitsidianWidget/` is picked up automatically. CI (`.github/workflows/build.yml`) builds for the simulator on every push.
 
 ## Token
 

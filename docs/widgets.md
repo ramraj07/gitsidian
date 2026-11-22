@@ -1,0 +1,84 @@
+# Home-screen widgets: `*.gitsidian.widget`
+
+Any file in a vault whose name ends in **`.gitsidian.widget`** can be shown on the
+iPhone Home Screen. Add the **Vault widget** from the widget gallery, long-press it,
+**Edit Widget**, and pick the file. Each widget instance shows one file, so a Smart
+Stack can hold several.
+
+## The format
+
+The file is a **JavaScript program**. It builds the widget through a small runtime
+API, and the widget renders the result natively in SwiftUI. Nothing is parsed as HTML.
+It's the same runtime and API (v1) as [Kondai](https://github.com/ramraj07/kondai)
+widgets, so a Kondai script works here unchanged (`kondai.widget()` is an alias).
+
+Why a program and not JSON or YAML: WidgetKit can't scroll, host a web view, or run
+code between refreshes. A script lets one file have pages, live timers, charts,
+canvas drawings and buttons, and still render as plain SwiftUI. An agent (or a CI
+job, or you) rewrites the file with fresh data and commits it.
+
+```js
+const w = gitsidian.widget();
+const p = w.page();
+p.row(r => { r.text("Inbox", { font: "headline" }); r.spacer(); r.text("3", { font: "title", color: "#7c5cff" }); });
+p.list([
+  { title: "Reply to Sam", detail: "today", url: gitsidian.note("Inbox/Sam") },
+  { title: "Book flights", detail: "Fri" },
+]);
+p.spacer();
+p.button("Open inbox", gitsidian.note("/Inbox.md"));
+w.refreshAfter(60);
+```
+
+### Runtime API
+
+```
+gitsidian.widget()                  -> Widget        (alias: kondai.widget())
+gitsidian.note(path)                -> "gitsidian://open?…" URL that opens a vault file in the app.
+                                       "/x/y" is vault-absolute; anything else is relative to the
+                                       widget file's folder. Note names without .md resolve like [[links]].
+gitsidian.family                    -> "small" | "medium" | "large" | "extraLarge" | "app" (in-app preview)
+gitsidian.path / .repo / .branch    -> where this file lives
+
+Widget.page()                       -> Page   pages are 1..n; >1 page adds a ‹ n/N › pager
+Widget.fullView(html)                         shown in the app's preview ("Full view"), scrollable
+Widget.refreshAfter(minutes)                  next run hint, clamped 5..1440 (iOS budgets ~40–70/day)
+
+Every node method appends to its container and returns the node.
+Container.row(fn) / Container.column(fn)
+Container.text(str, {font, color, align, lines})
+    font: largeTitle | title | headline | body | caption | mono      color: "#rrggbb[aa]"
+    align: leading | center | trailing                                lines: 0 = unlimited
+Container.image(base64OrDataURL, {width, height, corner})
+Container.canvas(w, h, ctx => …)    Canvas 2D subset, rendered at 3x
+Container.timer(date) / relativeDate(date)    live, system-rendered (ISO-8601 string or Date)
+Container.progress(start, end)      live bar between two dates
+Container.gauge(value, {min, max, label})
+Container.list([{title, detail, url}])        rows with url are tappable
+Container.chart({type: "bar"|"line"|"area", data: [{x, y}], color})
+Container.button(label, url)        opens any URL scheme (gitsidian.note(), https, maps://, shortcuts://…)
+Container.button(label, {page: n})  switches page in place, no app launch
+Container.spacer()
+```
+
+Canvas subset: `fillStyle strokeStyle lineWidth font globalAlpha textAlign fillRect
+strokeRect clearRect beginPath moveTo lineTo arc closePath fill stroke fillText save
+restore translate scale rotate roundRect createLinearGradient/addColorStop`.
+
+### Limits
+
+No network, timers, `fetch` or file access: the data is in the file. 2 s run time,
+~30 MB memory. Script errors show as text in the widget and in the in-app preview.
+Typical sizes: small 170×170 pt, medium 364×170, large 364×382 (minus 12 pt padding).
+
+## How it updates
+
+- **In the app**, opening a widget file shows a live preview at small, medium and
+  large sizes, plus a Code tab. **New widget** (file menu or ⋯) writes a starter file.
+- The app copies every widget file it sees into the App Group, with the git blob sha
+  of the GitHub version it's based on, and reloads the widgets when they change.
+- **The widget fetches the file from GitHub itself** on every timeline refresh
+  (contents API, using the same token). If GitHub's sha differs from the cached one,
+  the new version wins. So a commit from an agent or your laptop shows up without
+  opening the app; unpushed edits made on the phone are shown until GitHub moves.
+- Tapping the widget opens the file in Gitsidian.

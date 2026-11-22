@@ -9,8 +9,9 @@ struct FileNode: Identifiable, Hashable {
 
     var ext: String { (name as NSString).pathExtension.lowercased() }
     var isMarkdown: Bool { !isFolder && ext == "md" }
-    /// Obsidian shows notes without their .md extension.
-    var displayName: String { isMarkdown ? (name as NSString).deletingPathExtension : name }
+    var isWidget: Bool { !isFolder && WidgetFile.isWidget(name) }
+    /// Obsidian shows notes without their .md extension; widgets drop `.gitsidian.widget`.
+    var displayName: String { isMarkdown ? (name as NSString).deletingPathExtension : isWidget ? WidgetFile.displayName(name) : name }
 
     static func build(root: URL, showHidden: Bool) -> FileNode {
         FileNode(name: "", path: "", isFolder: true, children: children(of: root, rel: "", showHidden: showHidden))
@@ -49,9 +50,10 @@ struct FileNode: Identifiable, Hashable {
 }
 
 enum FileKind {
-    case markdown, text, image, pdf, other
+    case markdown, text, widget, image, pdf, other
 
     init(path: String) {
+        if WidgetFile.isWidget(path) { self = .widget; return }
         switch (path as NSString).pathExtension.lowercased() {
         case "md", "markdown": self = .markdown
         case "txt", "json", "canvas", "css", "js", "ts", "yml", "yaml", "csv", "tsv", "html", "xml", "base", "sh", "py", "swift", "toml", "ini", "log", "": self = .text
@@ -65,6 +67,7 @@ enum FileKind {
         switch self {
         case .markdown: return "doc.text"
         case .text: return "doc.plaintext"
+        case .widget: return "square.grid.2x2"
         case .image: return "photo"
         case .pdf: return "doc.richtext"
         case .other: return "doc"

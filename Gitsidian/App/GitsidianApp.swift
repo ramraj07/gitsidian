@@ -14,6 +14,7 @@ struct GitsidianApp: App {
             RootView()
                 .environment(app)
                 .tint(.accentColor)
+                .onOpenURL { app.handle($0) }
         }
     }
 }

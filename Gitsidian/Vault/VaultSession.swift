@@ -32,6 +32,7 @@ final class VaultSession {
     var hasLocalEdits = false
     var pendingCount = 0
     var notice: String?                     // transient message (conflicts etc.)
+    var pendingOpen: String?                // from a gitsidian://open link, opened once the vault is ready
 
     /// Bumped whenever a sync rewrote files on disk; editors use it to reload.
     var diskVersion = 0
@@ -58,6 +59,7 @@ final class VaultSession {
         if isCloned {
             refreshTree()
             if let last = UserDefaults.standard.string(forKey: lastOpenKey), exists(last) { currentPath = last }
+            openPending()
             pendingCount = (try? await engine.pendingChanges().count) ?? 0
             hasLocalEdits = pendingCount > 0
             if Pref.d.bool(forKey: Pref.syncOnOpen) { await sync() }
@@ -75,6 +77,7 @@ final class VaultSession {
             lastSync = Date()
             refreshTree()
             currentPath = files.first(where: { ["readme.md", "home.md", "index.md"].contains($0.lowercased()) })
+            openPending()
         } catch {
             cloneError = error.localizedDescription
         }
@@ -88,6 +91,28 @@ final class VaultSession {
         let all = FileNode.build(root: root, showHidden: true)
         files = all.allFiles.map(\.path)
         if let c = currentPath, !exists(c) { currentPath = nil }
+        publishWidgets()
+    }
+
+    var widgetFiles: [String] { files.filter(WidgetFile.isWidget) }
+
+    /// Hands every `*.gitsidian.widget` file, as it is on disk now, to the home-screen widget.
+    func publishWidgets() {
+        guard isCloned else { return }
+        let paths = widgetFiles
+        let config = config
+        let scripts = Dictionary(uniqueKeysWithValues: paths.map { ($0, readText($0)) })
+        Task {
+            let entries = await engine.state.entries
+            let old = Dictionary(WidgetStore.shared.load().filter { $0.vaultID == config.id }.map { ($0.path, $0) }, uniquingKeysWith: { a, _ in a })
+            let records = paths.map { p -> WidgetRecord in
+                var r = WidgetRecord(vaultID: config.id, owner: config.owner, repo: config.repo, branch: config.branch,
+                                     path: p, script: scripts[p], baseSha: entries[p]?.sha, updatedAt: old[p]?.updatedAt)
+                if old[p]?.script != r.script || old[p]?.baseSha != r.baseSha { r.updatedAt = Date() }
+                return r
+            }
+            if WidgetStore.shared.replace(vault: config.id, with: records) { WidgetReload.all() }
+        }
     }
 
     var visibleFiles: [String] {
@@ -102,6 +127,18 @@ final class VaultSession {
     }
 
     // MARK: Navigation
+
+    /// Opens a deep-linked path now if the vault is ready, else as soon as it is.
+    func openDeepLink(_ path: String) {
+        pendingOpen = path
+        if isCloned { openPending() }
+    }
+
+    private func openPending() {
+        guard let p = pendingOpen else { return }
+        pendingOpen = nil
+        if let resolved = exists(p) ? p : resolve(p, from: nil) { open(resolved) }
+    }
 
     func open(_ path: String) {
         guard path != currentPath else { return }
@@ -185,6 +222,7 @@ final class VaultSession {
         try? fm.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? Data(text.utf8).write(to: u, options: .atomic)
         localChange()
+        if WidgetFile.isWidget(path) { publishWidgets() }
     }
 
     func writeData(_ path: String, _ data: Data) {
@@ -222,6 +260,18 @@ final class VaultSession {
         let u = url(path)
         try? fm.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
         guard (try? Data(content.utf8).write(to: u, options: .withoutOverwriting)) != nil else { return nil }
+        localChange(treeChanged: true)
+        return path
+    }
+
+    /// Creates `<name>.gitsidian.widget` from the starter template.
+    @discardableResult
+    func createWidget(in folder: String, name: String?) -> String? {
+        let base = Links.sanitize(name ?? "Widget")
+        let path = uniquePath(folder: folder, base: base, ext: String(WidgetFile.suffix.dropFirst()))
+        let u = url(path)
+        try? fm.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
+        guard (try? Data(WidgetTemplate.starter(title: base).utf8).write(to: u, options: .withoutOverwriting)) != nil else { return nil }
         localChange(treeChanged: true)
         return path
     }
@@ -275,6 +325,7 @@ final class VaultSession {
         var name = Links.sanitize(newName)
         guard !name.isEmpty else { return false }
         if !isFolder(path), FileKind(path: path) == .markdown, !name.lowercased().hasSuffix(".md") { name += ".md" }
+        if !isFolder(path), FileKind(path: path) == .widget, !WidgetFile.isWidget(name) { name += WidgetFile.suffix }
         let dir = (path as NSString).deletingLastPathComponent
         return move(path, to: dir.isEmpty ? name : "\(dir)/\(name)")
     }
@@ -324,7 +375,7 @@ final class VaultSession {
         let q = query.trimmingCharacters(in: .whitespaces)
         guard q.count >= 2 else { return [] }
         var out: [SearchHit] = []
-        for f in visibleFiles where [.markdown, .text].contains(FileKind(path: f)) {
+        for f in visibleFiles where [.markdown, .text, .widget].contains(FileKind(path: f)) {
             let text = readText(f)
             let nameHit = f.localizedCaseInsensitiveContains(q)
             let lines = text.split(separator: "\n").filter { $0.localizedCaseInsensitiveContains(q) }.prefix(3).map {
@@ -376,6 +427,7 @@ final class VaultSession {
             }
             lastSync = Date()
             status = .idle
+            publishWidgets()   // base shas moved even if no widget file changed
         } catch {
             status = .error(error.localizedDescription)
         }
