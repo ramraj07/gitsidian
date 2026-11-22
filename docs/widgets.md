@@ -82,3 +82,6 @@ Typical sizes: small 170×170 pt, medium 364×170, large 364×382 (minus 12 pt p
   the new version wins. So a commit from an agent or your laptop shows up without
   opening the app; unpushed edits made on the phone are shown until GitHub moves.
 - Tapping the widget opens the file in Gitsidian.
+- Buttons and list rows with a `url` can open other apps (`maps://`, `tel:`, `shortcuts://run-shortcut?name=…`,
+  `https://…`, any installed app's scheme). Widget taps always arrive in Gitsidian first, and it passes
+  non-Gitsidian URLs on to iOS, so the app flashes briefly before the target opens.

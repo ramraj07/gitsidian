@@ -30,13 +30,21 @@ w.refreshAfter(60);
 | `.progress(start, end)` `.timer(date)` `.relativeDate(date)` | live; ISO string or `Date` |
 | `.canvas(w, h, ctx => …)` | Canvas2D subset: fill/stroke styles, rects, paths, `arc`, `roundRect`, `fillText`, transforms, `createLinearGradient` |
 | `.image(base64 or dataURL, {width, height, corner})` | |
-| `.button(label, url)` / `.button(label, {page: n})` | any URL scheme / switch page in place |
+| `.button(label, url)` / `.button(label, {page: n})` | open a URL (see below) / switch page in place |
 | `.spacer()` | |
 | `gitsidian.note(path)` | URL that opens a vault file. `/x` = from the vault root, otherwise relative to this file. A name without `.md` resolves like `[[links]]`. |
 | `gitsidian.family` | `small medium large extraLarge app`; branch on it |
 | `gitsidian.path` `.repo` `.branch` | |
 
 `kondai.widget()` is an alias. Kondai scripts work unchanged.
+
+## Opening other apps
+`button(label, url)` and `list` rows with `url` can open any app that has a URL scheme or universal link. A tap goes through Gitsidian (it flashes briefly), which passes the URL on to iOS.
+- System: `maps://?q=coffee`, `tel:+15555550123`, `sms:+1555…`, `mailto:a@b.com`, `calshow:`, `x-apple-reminderkit://`
+- Shortcuts (can do almost anything): `shortcuts://run-shortcut?name=My%20Shortcut`
+- Apps: `spotify:`, `things:///add?title=…`, `obsidian://open?vault=…`, etc. These only work if the app is installed.
+- `https://…`: opens the claiming app, otherwise Safari.
+- Percent-encode query values (`encodeURIComponent`). Prefer `https` when unsure whether the app is installed.
 
 ## Layout rules
 - Sizes (pt, before 12 pt padding): small 170×170, medium 364×170, large 364×382. **No scrolling.** Overflow gets clipped, so paginate.

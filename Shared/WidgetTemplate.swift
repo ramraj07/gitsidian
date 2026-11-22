@@ -19,7 +19,8 @@ enum WidgetTemplate {
         //   page.gauge(v, {min, max, label})  page.progress(start, end)  page.timer(date)  page.relativeDate(date)
         //   page.canvas(w, h, ctx => …)        Canvas 2D subset
         //   page.image(base64OrDataURL, {width, height, corner})
-        //   page.button(label, url | {page: n})
+        //   page.button(label, url | {page: n})   url can open other apps: maps://?q=…, tel:…, https://…,
+        //                                      shortcuts://run-shortcut?name=…, spotify:…, any app's URL scheme
         //   gitsidian.note("Some note")        -> URL that opens a note in Gitsidian
         //   gitsidian.family                   -> "small" | "medium" | "large" | "extraLarge" | "app"
         //   gitsidian.path / .repo / .branch
