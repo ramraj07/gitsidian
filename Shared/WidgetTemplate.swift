@@ -17,6 +17,7 @@ enum WidgetTemplate {
         //   page.row(r => …)  page.column(c => …)  page.spacer()
         //   page.list([{title, detail, url}])  page.chart({type: "bar"|"line"|"area", data: [{x, y}], color})
         //   page.gauge(v, {min, max, label})  page.progress(start, end)  page.timer(date)  page.relativeDate(date)
+        //   (timer/progress tick live: only for countdowns worth watching. relativeDate = "5 min ago")
         //   page.canvas(w, h, ctx => …)        Canvas 2D subset
         //   page.image(base64OrDataURL, {width, height, corner})
         //   page.button(label, url | {page: n})   url can open other apps: maps://?q=…, tel:…, https://…,
@@ -39,8 +40,6 @@ enum WidgetTemplate {
         const p1 = w.page();
         p1.row((r) => {
           r.text("\(t)", { font: "headline", lines: 1 });
-          r.spacer();
-          r.relativeDate(new Date());
         });
         p1.row((r) => {
           r.canvas(64, 64, (ctx) => {

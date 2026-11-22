@@ -27,7 +27,8 @@ w.refreshAfter(60);
 | `.list([{title, detail, url}])` | ≤50 rows; `url` makes the row tappable |
 | `.chart({type, data:[{x,y}], color})` | type: `bar line area` |
 | `.gauge(v, {min, max, label})` | default 0..1 |
-| `.progress(start, end)` `.timer(date)` `.relativeDate(date)` | live; ISO string or `Date` |
+| `.relativeDate(date)` | "5 min ago" / "in 2 hr"; minute granularity (live on iOS 18) |
+| `.timer(date)` `.progress(start, end)` | **tick every second**; ISO string or `Date` |
 | `.canvas(w, h, ctx => …)` | Canvas2D subset: fill/stroke styles, rects, paths, `arc`, `roundRect`, `fillText`, transforms, `createLinearGradient` |
 | `.image(base64 or dataURL, {width, height, corner})` | |
 | `.button(label, url)` / `.button(label, {page: n})` | open a URL (see below) / switch page in place |
@@ -50,7 +51,7 @@ w.refreshAfter(60);
 - Sizes (pt, before 12 pt padding): small 170×170, medium 364×170, large 364×382. **No scrolling.** Overflow gets clipped, so paginate.
 - Shape: header row → content → `spacer()` → buttons. Medium has room for ~4 list rows; large ~10.
 - Keep canvas width ≤ 300 (≤ 140 on small). Use `lines: 1` on text that could wrap.
-- Use `relativeDate`/`timer`/`progress` for anything time-based, because baked text goes stale.
+- Dates: prefer `relativeDate` or plain text ("Due Fri 3 pm"). Use `timer`/`progress` only for a countdown the user wants to watch (a meeting starting, a timer); a seconds counter is distracting. Never `relativeDate(new Date())` as an "updated" stamp.
 
 ## Checklist
 1. Fetch real data first; never invent numbers.

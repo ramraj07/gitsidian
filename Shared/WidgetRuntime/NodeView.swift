@@ -60,7 +60,7 @@ struct NodeView: View {
         case .timer(let date):
             Text(date, style: .timer).font(.body.monospacedDigit())
         case .relativeDate(let date):
-            Text(date, style: .relative).font(.body)
+            RelativeDateText(date: date)
         case .progress(let start, let end):
             ProgressView(timerInterval: start...end, countsDown: false, label: { EmptyView() }, currentValueLabel: { EmptyView() })
                 .tint(.accentColor)
@@ -200,5 +200,29 @@ extension Color {
     init?(css: String) {
         guard let ui = CSSColor.parse(css) else { return nil }
         self = Color(uiColor: ui)
+    }
+}
+
+/// "5 min ago" / "in 2 hr". Minute granularity, never a seconds counter:
+/// live on iOS 18 (system-updated), fixed at render time on iOS 17.
+struct RelativeDateText: View {
+    let date: Date
+
+    var body: some View {
+        if #available(iOS 18.0, *) {
+            Text(.currentDate, format: .reference(to: date,
+                                                   allowedFields: [.year, .month, .week, .day, .hour, .minute],
+                                                   maxFieldCount: 1))
+                .font(.body)
+        } else {
+            Text(Self.fallback(date)).font(.body)
+        }
+    }
+
+    static func fallback(_ date: Date, now: Date = Date()) -> String {
+        if abs(date.timeIntervalSince(now)) < 60 { return "now" }
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .short
+        return f.localizedString(for: date, relativeTo: now)
     }
 }

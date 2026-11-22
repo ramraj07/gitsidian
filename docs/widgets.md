@@ -51,7 +51,8 @@ Container.text(str, {font, color, align, lines})
     align: leading | center | trailing                                lines: 0 = unlimited
 Container.image(base64OrDataURL, {width, height, corner})
 Container.canvas(w, h, ctx => …)    Canvas 2D subset, rendered at 3x
-Container.timer(date) / relativeDate(date)    live, system-rendered (ISO-8601 string or Date)
+Container.relativeDate(date)        "5 min ago" / "in 2 hr", minute granularity (live on iOS 18)
+Container.timer(date)               live seconds counter; use only for countdowns worth watching
 Container.progress(start, end)      live bar between two dates
 Container.gauge(value, {min, max, label})
 Container.list([{title, detail, url}])        rows with url are tappable
