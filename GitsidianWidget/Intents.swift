@@ -63,7 +63,7 @@ struct PageIntent: AppIntent {
 
     func perform() async throws -> some IntentResult {
         WidgetStore.shared.setPageNumber(page, widgetID)
-        WidgetStore.shared.markSkipFetchOnce()
+        WidgetStore.shared.markSkipFetchOnce(widgetID)
         WidgetCenter.shared.reloadTimelines(ofKind: GitsidianWidget.kind)
         return .result()
     }

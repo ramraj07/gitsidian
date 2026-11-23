@@ -19,6 +19,7 @@ struct WidgetEntry: TimelineEntry {
     enum Content {
         case program(WidgetProgram, page: Int, record: WidgetRecord)
         case noFile
+        case needsConfig
         case error(String, record: WidgetRecord?)
     }
     let date: Date
@@ -45,7 +46,7 @@ struct Provider: AppIntentTimelineProvider {
     }
 
     func timeline(for configuration: SelectWidgetFileIntent, in context: Context) async -> Timeline<WidgetEntry> {
-        let fetch = !WidgetStore.shared.consumeSkipFetchOnce()
+        let fetch = !(configuration.file.map { WidgetStore.shared.consumeSkipFetchOnce($0.id) } ?? false)
         let entry = await Self.makeEntry(id: configuration.file?.id, family: context.family, fetch: fetch)
         var minutes = Self.defaultRefreshMinutes
         if case .program(let p, _, _) = entry.content, let m = p.refreshAfterMinutes { minutes = min(max(m, 5), 1440) }
@@ -66,9 +67,16 @@ struct Provider: AppIntentTimelineProvider {
     static func makeEntry(id: String?, family: WidgetFamily, fetch: Bool) async -> WidgetEntry {
         let store = WidgetStore.shared
         let now = Date()
-        let records = store.load()
-        let picked = id.flatMap { id in records.first { $0.id == id } }
-            ?? (id == nil ? records.max { ($0.updatedAt ?? .distantPast) < ($1.updatedAt ?? .distantPast) } : nil)
+        // Only ever the configured file. An unconfigured widget uses the sole file if there is exactly
+        // one, and otherwise asks to be configured, never "whichever changed last" (that made widgets swap).
+        let picked: WidgetRecord?
+        if let id {
+            picked = store.record(id: id)
+        } else {
+            let all = store.load()
+            picked = all.count == 1 ? all[0] : nil
+            if all.count > 1 { return WidgetEntry(date: now, content: .needsConfig) }
+        }
         guard var record = picked else {
             return WidgetEntry(date: now, content: id == nil ? .noFile : .error("This widget file is no longer in any vault. Edit the widget to pick another.", record: nil))
         }
@@ -112,6 +120,8 @@ struct GitsidianWidgetView: View {
                     .widgetURL(DeepLink.open(vault: record.vaultID, path: record.path))
             case .noFile:
                 StatusView(title: "No widget file yet", detail: "Add a .gitsidian.widget file to a vault in Gitsidian, then edit this widget to pick it.", symbol: "square.grid.2x2")
+            case .needsConfig:
+                StatusView(title: "Choose a widget file", detail: "Long-press › Edit Widget › File.", symbol: "hand.tap")
             case .error(let message, let record):
                 StatusView(title: "Widget error", detail: String(message.prefix(200)), symbol: "exclamationmark.triangle")
                     .widgetURL(record.flatMap { DeepLink.open(vault: $0.vaultID, path: $0.path) })

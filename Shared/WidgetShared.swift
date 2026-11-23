@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 enum AppGroup {
     /// Must match the App Groups capability of the app and the widget extension.
@@ -74,6 +75,10 @@ struct WidgetRecord: Codable, Identifiable, Hashable, Sendable {
     /// Git blob sha of the GitHub version `script` is based on. The widget refetches the file and
     /// replaces `script` only when GitHub's sha differs, so unpushed local edits are kept until then.
     var baseSha: String?
+    /// The synced blob sha the app had when it last wrote this record. While it hasn't changed (the app
+    /// hasn't pulled anything new) and the file has no local edits, the app leaves the widget's own,
+    /// possibly newer, GitHub fetch alone instead of putting the older copy back.
+    var appSha: String?
     var updatedAt: Date?
 
     var fullName: String { "\(owner)/\(repo)" }
@@ -82,59 +87,72 @@ struct WidgetRecord: Codable, Identifiable, Hashable, Sendable {
 }
 
 /// The App Group cache shared by the app (writes what's on disk) and the widget (refreshes from GitHub).
+/// One JSON file per widget file, so two processes (or two widgets refreshing at once) never
+/// overwrite each other's records with a stale copy of the whole list.
 final class WidgetStore: @unchecked Sendable {
     static let shared = WidgetStore()
 
     let defaults: UserDefaults
-    private let url: URL
-    private let lock = NSLock()
+    private let dir: URL
+    private let fm = FileManager.default
 
     init() {
         defaults = UserDefaults(suiteName: AppGroup.identifier) ?? .standard
-        let dir = (FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppGroup.identifier)
+        let base = (FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppGroup.identifier)
             ?? URL.applicationSupportDirectory).appendingPathComponent("Library/Caches/widgets", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        url = dir.appendingPathComponent("widgets.json")
+        dir = base.appendingPathComponent("records", isDirectory: true)
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        // Pre-1.1 cache was a single widgets.json; it's rebuilt by the app on next launch.
+        try? fm.removeItem(at: base.appendingPathComponent("widgets.json"))
+    }
+
+    private func fileURL(_ id: String) -> URL {
+        let hex = SHA256.hash(data: Data(id.utf8)).prefix(16).map { String(format: "%02x", $0) }.joined()
+        return dir.appendingPathComponent(hex + ".json")
     }
 
     func load() -> [WidgetRecord] {
-        lock.lock(); defer { lock.unlock() }
-        guard let d = try? Data(contentsOf: url) else { return [] }
-        return (try? JSONDecoder().decode([WidgetRecord].self, from: d)) ?? []
+        let files = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+        return files.filter { $0.pathExtension == "json" }
+            .compactMap { try? JSONDecoder().decode(WidgetRecord.self, from: Data(contentsOf: $0)) }
+            .sorted { ($0.fullName, $0.path) < ($1.fullName, $1.path) }
     }
 
-    func save(_ records: [WidgetRecord]) {
-        lock.lock(); defer { lock.unlock() }
-        if let d = try? JSONEncoder().encode(records) { try? d.write(to: url, options: .atomic) }
-    }
-
-    func record(id: String) -> WidgetRecord? { load().first { $0.id == id } }
-
-    /// Replaces one vault's records; returns true if anything changed.
-    @discardableResult
-    func replace(vault: UUID, with records: [WidgetRecord]) -> Bool {
-        let all = load()
-        let old = all.filter { $0.vaultID == vault }
-        guard Set(old) != Set(records) else { return false }
-        save(all.filter { $0.vaultID != vault } + records.sorted { $0.path < $1.path })
-        return true
+    func record(id: String) -> WidgetRecord? {
+        guard let d = try? Data(contentsOf: fileURL(id)) else { return nil }
+        return try? JSONDecoder().decode(WidgetRecord.self, from: d)
     }
 
     func update(_ record: WidgetRecord) {
-        var all = load()
-        if let i = all.firstIndex(where: { $0.id == record.id }) { all[i] = record } else { all.append(record) }
-        save(all)
+        if let d = try? JSONEncoder().encode(record) { try? d.write(to: fileURL(record.id), options: .atomic) }
+    }
+
+    /// Makes one vault's records exactly `records`; returns true if anything changed.
+    @discardableResult
+    func replace(vault: UUID, with records: [WidgetRecord]) -> Bool {
+        var changed = false
+        let keep = Set(records.map(\.id))
+        for old in load() where old.vaultID == vault && !keep.contains(old.id) {
+            try? fm.removeItem(at: fileURL(old.id))
+            changed = true
+        }
+        for r in records where record(id: r.id) != r {
+            update(r)
+            changed = true
+        }
+        return changed
     }
 
     // Current page per widget file (1-based), set by the page buttons.
     func pageNumber(_ id: String) -> Int { max(1, defaults.integer(forKey: "page." + id)) }
     func setPageNumber(_ n: Int, _ id: String) { defaults.set(max(1, n), forKey: "page." + id) }
 
-    /// A page switch reloads the timeline; it shouldn't wait on the network.
-    func markSkipFetchOnce() { defaults.set(true, forKey: "skipFetchOnce") }
-    func consumeSkipFetchOnce() -> Bool {
-        let v = defaults.bool(forKey: "skipFetchOnce")
-        if v { defaults.removeObject(forKey: "skipFetchOnce") }
+    /// A page switch reloads the timeline; that widget shouldn't wait on the network.
+    func markSkipFetchOnce(_ id: String) { defaults.set(true, forKey: "skipFetchOnce." + id) }
+    func consumeSkipFetchOnce(_ id: String) -> Bool {
+        let key = "skipFetchOnce." + id
+        let v = defaults.bool(forKey: key)
+        if v { defaults.removeObject(forKey: key) }
         return v
     }
 }

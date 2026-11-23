@@ -101,14 +101,22 @@ final class VaultSession {
         guard isCloned else { return }
         let paths = widgetFiles
         let config = config
-        let scripts = Dictionary(uniqueKeysWithValues: paths.map { ($0, readText($0)) })
+        let data = Dictionary(uniqueKeysWithValues: paths.map { ($0, (try? Data(contentsOf: url($0))) ?? Data()) })
         Task {
             let entries = await engine.state.entries
-            let old = Dictionary(WidgetStore.shared.load().filter { $0.vaultID == config.id }.map { ($0.path, $0) }, uniquingKeysWith: { a, _ in a })
+            let store = WidgetStore.shared
             let records = paths.map { p -> WidgetRecord in
+                let synced = entries[p]?.sha
+                let local = data[p] ?? Data()
+                let id = WidgetRecord(vaultID: config.id, owner: "", repo: "", branch: "", path: p).id
+                let old = store.record(id: id)
+                if let old, old.appSha == synced, GitHash.blob(local) == synced, old.branch == config.branch {
+                    return old   // nothing new from GitHub or local edits: keep what the widget may have fetched
+                }
                 var r = WidgetRecord(vaultID: config.id, owner: config.owner, repo: config.repo, branch: config.branch,
-                                     path: p, script: scripts[p], baseSha: entries[p]?.sha, updatedAt: old[p]?.updatedAt)
-                if old[p]?.script != r.script || old[p]?.baseSha != r.baseSha { r.updatedAt = Date() }
+                                     path: p, script: String(decoding: local, as: UTF8.self), baseSha: synced,
+                                     appSha: synced, updatedAt: old?.updatedAt)
+                if r != old { r.updatedAt = Date() }
                 return r
             }
             if WidgetStore.shared.replace(vault: config.id, with: records) { WidgetReload.all() }

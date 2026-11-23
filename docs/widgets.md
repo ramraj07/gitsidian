@@ -2,8 +2,9 @@
 
 Any file in a vault whose name ends in **`.gitsidian.widget`** can be shown on the
 iPhone Home Screen. Add the **Vault widget** from the widget gallery, long-press it,
-**Edit Widget**, and pick the file. Each widget instance shows one file, so a Smart
-Stack can hold several.
+**Edit Widget**, and pick the file. Each widget instance shows only the file it was
+given, so a Smart Stack can hold several. A widget with no file picked shows the only
+widget file if there is exactly one, otherwise it asks you to choose.
 
 ## The format
 
