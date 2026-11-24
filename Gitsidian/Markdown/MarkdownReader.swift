@@ -7,18 +7,22 @@ struct MarkdownReader: View {
     let path: String
     let session: VaultSession
     var onToggleTask: (Int) -> Void
+    var anchor: AnchorRequest? = nil
     @AppStorage(Pref.editorFontSize) private var fontSize = 17.0
+    @State private var highlighted: Int?
     @AppStorage(Pref.readableLineLength) private var readable = true
     @State private var backlinks: [Backlink] = []
     @State private var showBacklinks = true
 
     var body: some View {
+        let blocks = MarkdownParser.parse(text)
+        ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 Text(((path as NSString).lastPathComponent as NSString).deletingPathExtension)
                     .font(.system(size: fontSize * 1.75, weight: .bold))
                     .padding(.bottom, 14)
-                BlocksView(blocks: MarkdownParser.parse(text), session: session, path: path, onToggleTask: onToggleTask)
+                BlocksView(blocks: blocks, session: session, path: path, onToggleTask: onToggleTask, highlighted: highlighted)
                 backlinksSection.padding(.top, 40)
             }
             .font(.system(size: fontSize))
@@ -29,10 +33,23 @@ struct MarkdownReader: View {
             .frame(maxWidth: readable ? 720 : .infinity, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
+        .onAppear { scroll(proxy, blocks) }
+        .onChange(of: anchor) { scroll(proxy, blocks) }
+        }
         .environment(\.openURL, OpenURLAction { url in handle(url) })
         .task(id: text) {
             try? await Task.sleep(for: .milliseconds(150))
             backlinks = session.backlinks(for: path)
+        }
+    }
+
+    /// Scrolls to the requested heading/block and flashes it.
+    private func scroll(_ proxy: ScrollViewProxy, _ blocks: [MDBlock]) {
+        guard let anchor, let id = NoteAnchor.blockID(in: blocks, subpath: anchor.subpath) else { return }
+        DispatchQueue.main.async {
+            withAnimation { proxy.scrollTo(BlocksView.anchorID(id), anchor: .top) }
+            highlighted = id
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { withAnimation(.easeOut(duration: 0.6)) { highlighted = nil } }
         }
     }
 
@@ -44,7 +61,8 @@ struct MarkdownReader: View {
             return .handled
         }
         if url.scheme == nil || url.scheme == "file" {
-            let target = (url.path.removingPercentEncoding ?? url.path)
+            var target = (url.path.removingPercentEncoding ?? url.path)
+            if let f = url.fragment?.removingPercentEncoding, !f.isEmpty { target += "#" + f }
             if !target.isEmpty { session.openLink(target, from: path) }
             return .handled
         }
@@ -89,11 +107,21 @@ struct BlocksView: View {
     let session: VaultSession
     let path: String
     var onToggleTask: (Int) -> Void
+    /// Only the note's top-level BlocksView passes this; it also tags blocks as scroll targets.
+    var highlighted: Int?? = nil
+
+    static func anchorID(_ id: Int) -> String { "block-\(id)" }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(blocks) { block in
-                BlockView(block: block, session: session, path: path, onToggleTask: onToggleTask)
+                if let highlighted {
+                    BlockView(block: block, session: session, path: path, onToggleTask: onToggleTask)
+                        .background(Color.accentColor.opacity(highlighted == block.id ? 0.18 : 0).padding(-4))
+                        .id(Self.anchorID(block.id))
+                } else {
+                    BlockView(block: block, session: session, path: path, onToggleTask: onToggleTask)
+                }
             }
         }
     }

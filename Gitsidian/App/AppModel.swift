@@ -73,7 +73,7 @@ final class AppModel {
             guard let v = vaults.first(where: { $0.id == id }) else { return }
             open(v)
         }
-        session?.openDeepLink(link.path)
+        session?.openDeepLink(link.path, anchor: link.anchor)
     }
 
     func closeVault() {

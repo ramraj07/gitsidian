@@ -12,7 +12,7 @@ const p = w.page();                           // pages 1..n; >1 page adds a ‹ 
 p.row(r => { r.text("Title", {font: "headline"}); r.spacer(); r.text("42", {font: "title", color: "#34c759"}); });
 p.list([{title: "Item", detail: "today", url: gitsidian.note("Inbox")}]);
 p.spacer();
-p.button("Open", gitsidian.note("/Projects/Plan.md"));
+p.button("Open", gitsidian.note("/Projects/Plan.md#Next steps"));
 w.refreshAfter(60);
 ```
 
@@ -33,7 +33,7 @@ w.refreshAfter(60);
 | `.image(base64 or dataURL, {width, height, corner})` | |
 | `.button(label, url)` / `.button(label, {page: n})` | open a URL (see below) / switch page in place |
 | `.spacer()` | |
-| `gitsidian.note(path)` | URL that opens a vault file. `/x` = from the vault root, otherwise relative to this file. A name without `.md` resolves like `[[links]]`. |
+| `gitsidian.note(path)` | URL that opens a vault file. `/x` = from the vault root, otherwise relative to this file. A name without `.md` resolves like `[[links]]`. Add `#Heading` or `#^block-id` to open at that section: `note("Plan#Next steps")`. Heading match ignores case/markup; to link a paragraph, end its line in the note with ` ^block-id`. |
 | `gitsidian.family` | `small medium large extraLarge app`; branch on it |
 | `gitsidian.path` `.repo` `.branch` | |
 

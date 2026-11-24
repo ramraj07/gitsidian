@@ -75,6 +75,7 @@ struct TextFileView: View {
     let reading: Bool
     @State private var buffer: NoteBuffer
     @State private var flushId = UUID()
+    @State private var anchor: AnchorRequest?
     @AppStorage(Pref.editorFontSize) private var fontSize = 17.0
 
     init(session: VaultSession, path: String, markdown: Bool, reading: Bool) {
@@ -88,7 +89,7 @@ struct TextFileView: View {
     var body: some View {
         Group {
             if markdown && reading {
-                MarkdownReader(text: buffer.text, path: path, session: session, onToggleTask: toggleTask)
+                MarkdownReader(text: buffer.text, path: path, session: session, onToggleTask: toggleTask, anchor: anchor)
             } else {
                 MarkdownEditor(
                     text: $buffer.text,
@@ -96,7 +97,8 @@ struct TextFileView: View {
                     highlight: markdown,
                     autoFocus: buffer.text.isEmpty,
                     suggestions: { [session] q in session.linkSuggestions(q) },
-                    openLink: { [session, path] t in session.openLink(t, from: path) }
+                    openLink: { [session, path] t in session.openLink(t, from: path) },
+                    scrollTo: anchor.flatMap { a in NoteAnchor.line(in: buffer.text, subpath: a.subpath).map { (line: $0, token: a.token) } }
                 )
             }
         }
@@ -104,7 +106,9 @@ struct TextFileView: View {
         .onAppear {
             let b = buffer
             session.registerFlusher(flushId) { b.save() }
+            consumeAnchor()
         }
+        .onChange(of: session.anchorRequest) { consumeAnchor() }
         .onDisappear {
             buffer.save()
             session.unregisterFlusher(flushId)
@@ -112,6 +116,12 @@ struct TextFileView: View {
         .onChange(of: session.diskVersion) {
             if session.changedOnDisk.contains(path) { buffer.reloadIfClean() }
         }
+    }
+
+    private func consumeAnchor() {
+        guard let r = session.anchorRequest, r.path == path else { return }
+        session.anchorRequest = nil
+        anchor = r
     }
 
     private func toggleTask(_ line: Int) {

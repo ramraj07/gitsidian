@@ -31,35 +31,47 @@ struct WidgetFileContext: Sendable {
 
     /// `gitsidian.note("Daily/Today")` -> gitsidian://open?vault=…&path=Daily/Today
     /// Paths starting with "/" are vault-absolute; others resolve against the widget file's folder.
+    /// `Note#Heading` / `Note#^block-id` also scroll to that section.
     func noteURL(_ target: String) -> URL? {
         var t = target
+        var anchor: String?
+        if let i = t.firstIndex(of: "#") {
+            let a = t[t.index(after: i)...].trimmingCharacters(in: .whitespaces)
+            anchor = a.isEmpty ? nil : a
+            t = String(t[..<i])
+        }
+        guard !t.isEmpty else { return nil }
         if t.hasPrefix("/") {
             t.removeFirst()
         } else {
             let dir = (path as NSString).deletingLastPathComponent
             if !dir.isEmpty { t = ((dir as NSString).appendingPathComponent(t) as NSString).standardizingPath }
         }
-        return DeepLink.open(vault: vaultID, path: t)
+        return DeepLink.open(vault: vaultID, path: t, anchor: anchor)
     }
 }
 
-/// gitsidian://open?vault=<uuid>&path=<vault-relative path>
+/// gitsidian://open?vault=<uuid>&path=<vault-relative path>[&anchor=<Heading or ^block-id>]
 enum DeepLink {
     static let scheme = "gitsidian"
 
-    static func open(vault: UUID?, path: String) -> URL? {
+    static func open(vault: UUID?, path: String, anchor: String? = nil) -> URL? {
         var c = URLComponents()
         c.scheme = scheme
         c.host = "open"
-        c.queryItems = [URLQueryItem(name: "path", value: path)] + (vault.map { [URLQueryItem(name: "vault", value: $0.uuidString)] } ?? [])
+        var items = [URLQueryItem(name: "path", value: path)]
+        if let vault { items.append(URLQueryItem(name: "vault", value: vault.uuidString)) }
+        if let anchor { items.append(URLQueryItem(name: "anchor", value: anchor)) }
+        c.queryItems = items
         return c.url
     }
 
-    static func parse(_ url: URL) -> (vault: UUID?, path: String)? {
+    static func parse(_ url: URL) -> (vault: UUID?, path: String, anchor: String?)? {
         guard url.scheme == scheme, url.host == "open",
               let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
               let path = items.first(where: { $0.name == "path" })?.value, !path.isEmpty else { return nil }
-        return (items.first(where: { $0.name == "vault" })?.value.flatMap(UUID.init(uuidString:)), path)
+        return (items.first(where: { $0.name == "vault" })?.value.flatMap(UUID.init(uuidString:)), path,
+                items.first(where: { $0.name == "anchor" })?.value)
     }
 }
 

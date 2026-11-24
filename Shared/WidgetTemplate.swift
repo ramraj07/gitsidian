@@ -23,6 +23,7 @@ enum WidgetTemplate {
         //   page.button(label, url | {page: n})   url can open other apps: maps://?q=…, tel:…, https://…,
         //                                      shortcuts://run-shortcut?name=…, spotify:…, any app's URL scheme
         //   gitsidian.note("Some note")        -> URL that opens a note in Gitsidian
+        //   gitsidian.note("Note#Heading")     -> …scrolled to a section ("Note#^block-id" for a ^block-id line)
         //   gitsidian.family                   -> "small" | "medium" | "large" | "extraLarge" | "app"
         //   gitsidian.path / .repo / .branch
 

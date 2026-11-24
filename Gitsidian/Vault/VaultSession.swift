@@ -33,6 +33,9 @@ final class VaultSession {
     var pendingCount = 0
     var notice: String?                     // transient message (conflicts etc.)
     var pendingOpen: String?                // from a gitsidian://open link, opened once the vault is ready
+    @ObservationIgnored private var pendingAnchor: String?
+    /// Set when a note should scroll to a heading/block; the note view consumes and clears it.
+    var anchorRequest: AnchorRequest?
 
     /// Bumped whenever a sync rewrote files on disk; editors use it to reload.
     var diskVersion = 0
@@ -137,18 +140,22 @@ final class VaultSession {
     // MARK: Navigation
 
     /// Opens a deep-linked path now if the vault is ready, else as soon as it is.
-    func openDeepLink(_ path: String) {
+    func openDeepLink(_ path: String, anchor: String? = nil) {
         pendingOpen = path
+        pendingAnchor = anchor
         if isCloned { openPending() }
     }
 
     private func openPending() {
         guard let p = pendingOpen else { return }
         pendingOpen = nil
-        if let resolved = exists(p) ? p : resolve(p, from: nil) { open(resolved) }
+        let anchor = pendingAnchor
+        pendingAnchor = nil
+        if let resolved = exists(p) ? p : resolve(p, from: nil) { open(resolved, anchor: anchor) }
     }
 
-    func open(_ path: String) {
+    func open(_ path: String, anchor: String? = nil) {
+        if let anchor, !anchor.isEmpty { anchorRequest = AnchorRequest(path: path, subpath: anchor) }
         guard path != currentPath else { return }
         if let c = currentPath { backStack.append(c) }
         forwardStack.removeAll()
@@ -178,8 +185,12 @@ final class VaultSession {
     /// Opens a [[wikilink]] target, creating the note if it doesn't exist (like Obsidian).
     func openLink(_ target: String, from: String?) {
         let t = Links.stripSubpath(target)
-        if t.isEmpty { return }
-        if let p = resolve(t, from: from) { open(p); return }
+        let sub = Links.subpath(target)
+        if t.isEmpty {   // [[#Heading]] inside the same note
+            if let from, let sub { open(from, anchor: sub) }
+            return
+        }
+        if let p = resolve(t, from: from) { open(p, anchor: sub); return }
         let name = t.hasSuffix(".md") ? String(t.dropLast(3)) : t
         let folder = name.contains("/") ? (name as NSString).deletingLastPathComponent : ""
         if let p = createNote(in: folder, name: (name as NSString).lastPathComponent) { open(p) }

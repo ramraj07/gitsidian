@@ -10,6 +10,8 @@ struct MarkdownEditor: UIViewRepresentable {
     var autoFocus = false
     var suggestions: (String) -> [String] = { _ in [] }
     var openLink: (String) -> Void = { _ in }
+    /// (0-based line, request token): scroll there and put the cursor at its start, once per token.
+    var scrollTo: (line: Int, token: UUID)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -56,6 +58,10 @@ struct MarkdownEditor: UIViewRepresentable {
         } else if restyle {
             c.highlighter.highlight(tv.textStorage, in: NSRange(location: 0, length: tv.textStorage.length))
         }
+        if let s = scrollTo, s.token != c.scrolledToken {
+            c.scrolledToken = s.token
+            DispatchQueue.main.async { c.scroll(toLine: s.line) }
+        }
     }
 
     static func dismantleUIView(_ tv: UITextView, coordinator: Coordinator) {
@@ -70,6 +76,28 @@ struct MarkdownEditor: UIViewRepresentable {
         let highlighter = MarkdownHighlighter()
         let accessory = EditorAccessoryView(frame: CGRect(x: 0, y: 0, width: 320, height: 46), inputViewStyle: .keyboard)
         private var linkQueryStart: Int?
+        var scrolledToken: UUID?
+
+        /// Puts `line` near the top of the view with the cursor at its start.
+        func scroll(toLine line: Int) {
+            guard let tv = textView else { return }
+            let ns = tv.text as NSString
+            var loc = 0
+            for _ in 0..<line {
+                let r = ns.range(of: "\n", range: NSRange(location: loc, length: ns.length - loc))
+                if r.location == NSNotFound { break }
+                loc = r.location + 1
+            }
+            loc = min(loc, ns.length)
+            tv.selectedRange = NSRange(location: loc, length: 0)
+            let lm = tv.layoutManager
+            lm.ensureLayout(for: tv.textContainer)
+            let glyphs = lm.glyphRange(forCharacterRange: NSRange(location: loc, length: 0), actualCharacterRange: nil)
+            let rect = lm.boundingRect(forGlyphRange: glyphs, in: tv.textContainer)
+            let maxY = max(0, tv.contentSize.height - tv.bounds.height + tv.adjustedContentInset.bottom)
+            let y = min(max(0, rect.minY + tv.textContainerInset.top - 12), maxY)
+            tv.setContentOffset(CGPoint(x: 0, y: y - tv.adjustedContentInset.top), animated: true)
+        }
 
         init(_ parent: MarkdownEditor) { self.parent = parent }
 

@@ -38,6 +38,7 @@ gitsidian.widget()                  -> Widget        (alias: kondai.widget())
 gitsidian.note(path)                -> "gitsidian://open?…" URL that opens a vault file in the app.
                                        "/x/y" is vault-absolute; anything else is relative to the
                                        widget file's folder. Note names without .md resolve like [[links]].
+                                       "Note#Heading" / "Note#^block-id" open scrolled to that section.
 gitsidian.family                    -> "small" | "medium" | "large" | "extraLarge" | "app" (in-app preview)
 gitsidian.path / .repo / .branch    -> where this file lives
 

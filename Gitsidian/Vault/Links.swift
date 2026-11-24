@@ -11,6 +11,13 @@ enum Links {
         return (inner, nil)
     }
 
+    /// "Note#Heading" -> "Heading", "Note#^id" -> "^id", "Note" -> nil
+    static func subpath(_ target: String) -> String? {
+        guard let i = target.firstIndex(of: "#") else { return nil }
+        let s = target[target.index(after: i)...].trimmingCharacters(in: .whitespaces)
+        return s.isEmpty ? nil : s
+    }
+
     static func stripSubpath(_ target: String) -> String {
         var t = target
         if let i = t.firstIndex(of: "#") { t = String(t[..<i]) }
