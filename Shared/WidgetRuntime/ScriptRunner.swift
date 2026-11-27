@@ -15,11 +15,28 @@ enum ScriptRunner {
     ///     exceeded; a script that spins in pure JS is abandoned by the watchdog.
     ///   - now: injected clock for deterministic tests.
     static func run(script: String, file: WidgetFileContext = .preview, timeBudget: TimeInterval = defaultTimeBudget, now: Date = Date()) throws -> WidgetProgram {
-        final class Box: @unchecked Sendable { var result: Result<WidgetProgram, Error>? }
-        let box = Box()
+        try guarded(timeBudget: timeBudget) {
+            try runOnCurrentThread(script: script, file: file, timeBudget: timeBudget, now: now).build()
+        }
+    }
+
+    /// A `*.gitsidian.lock` script: same sandbox, but the result is what `gitsidian.lockScreen()` built.
+    static func runLock(script: String, file: WidgetFileContext, timeBudget: TimeInterval = defaultTimeBudget, now: Date = Date()) throws -> LockProgram {
+        try guarded(timeBudget: timeBudget) {
+            let state = try runOnCurrentThread(script: script, file: file, timeBudget: timeBudget, now: now)
+            guard state.lock != nil else {
+                throw ScriptError.exception(message: "A .gitsidian.lock file builds its widget with gitsidian.lockScreen()", line: nil)
+            }
+            return state.buildLock()
+        }
+    }
+
+    /// Runs `body` on a thread with a big stack and gives up after the time budget.
+    private static func guarded<T>(timeBudget: TimeInterval, _ body: @escaping @Sendable () throws -> T) throws -> T {
+        let box = ResultBox<T>()
         let done = DispatchSemaphore(value: 0)
         let thread = Thread {
-            box.result = Result { try runOnCurrentThread(script: script, file: file, timeBudget: timeBudget, now: now) }
+            box.result = Result { try body() }
             done.signal()
         }
         thread.name = "com.gitsidian.widget-script"
@@ -33,7 +50,7 @@ enum ScriptRunner {
         return try result.get()
     }
 
-    static func runOnCurrentThread(script: String, file: WidgetFileContext, timeBudget: TimeInterval, now: Date) throws -> WidgetProgram {
+    static func runOnCurrentThread(script: String, file: WidgetFileContext, timeBudget: TimeInterval, now: Date) throws -> RuntimeState {
         let vm = JSVirtualMachine()
         guard let context = JSContext(virtualMachine: vm) else {
             throw ScriptError.internalFailure("could not create JSContext")
@@ -58,7 +75,7 @@ enum ScriptRunner {
         context.evaluateScript(script, withSourceURL: URL(string: "gitsidian-widget://" + file.path))
         if let (m, l) = captured { throw ScriptError.exception(message: m, line: l) }
 
-        return state.build()
+        return state
     }
 
     /// Deterministic `Math.random` (mulberry32) and a `console` that swallows output
@@ -78,4 +95,8 @@ enum ScriptRunner {
       this.globalThis = this;
     })();
     """
+}
+
+private final class ResultBox<T>: @unchecked Sendable {
+    var result: Result<T, Error>?
 }

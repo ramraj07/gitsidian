@@ -7,15 +7,22 @@ enum AppGroup {
 }
 
 /// `*.gitsidian.widget`: a JavaScript program (Kondai runtime API v1) that builds a home-screen widget.
+/// `*.gitsidian.lock`: a JavaScript program that builds a Lock Screen widget with its own small API.
 enum WidgetFile {
     static let suffix = ".gitsidian.widget"
+    static let lockSuffix = ".gitsidian.lock"
 
     static func isWidget(_ path: String) -> Bool { path.lowercased().hasSuffix(suffix) }
+    static func isLock(_ path: String) -> Bool { path.lowercased().hasSuffix(lockSuffix) }
+    /// Either kind: both are cached for the widget extension.
+    static func isAnyWidget(_ path: String) -> Bool { isWidget(path) || isLock(path) }
 
-    /// "Tasks.gitsidian.widget" -> "Tasks"
+    /// "Tasks.gitsidian.widget" -> "Tasks", "Focus.gitsidian.lock" -> "Focus"
     static func displayName(_ path: String) -> String {
         let name = (path as NSString).lastPathComponent
-        return isWidget(name) ? String(name.dropLast(suffix.count)) : name
+        if isWidget(name) { return String(name.dropLast(suffix.count)) }
+        if isLock(name) { return String(name.dropLast(lockSuffix.count)) }
+        return name
     }
 }
 
@@ -25,7 +32,7 @@ struct WidgetFileContext: Sendable {
     var repo: String           // owner/name
     var branch: String
     var path: String
-    var family: String         // small | medium | large | extraLarge | app
+    var family: String         // small | medium | large | extraLarge | app; Lock Screen: rectangular | circular | inline
 
     static let preview = WidgetFileContext(vaultID: nil, repo: "", branch: "", path: "preview" + WidgetFile.suffix, family: "app")
 
@@ -111,6 +118,8 @@ struct WidgetRecord: Codable, Identifiable, Hashable, Sendable {
 
     var fullName: String { "\(owner)/\(repo)" }
     var name: String { WidgetFile.displayName(path) }
+    /// A Lock Screen file (`*.gitsidian.lock`) rather than a Home Screen one.
+    var isLock: Bool { WidgetFile.isLock(path) }
     var folder: String { (path as NSString).deletingLastPathComponent }
 }
 

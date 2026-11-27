@@ -6,6 +6,10 @@ iPhone Home Screen. Add the **Vault widget** from the widget gallery, long-press
 given, so a Smart Stack can hold several. A widget with no file picked shows the only
 widget file if there is exactly one, otherwise it asks you to choose.
 
+**Lock Screen** widgets are a separate file type, `*.gitsidian.lock`, with their own API made
+for the tiny space (rings, gauges, live countdowns, custom SVG) and a previewer for agents.
+See [`lockscreen.md`](lockscreen.md).
+
 ## The format
 
 The file is a **JavaScript program**. It builds the widget through a small runtime

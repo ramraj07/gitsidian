@@ -5,5 +5,6 @@ import SwiftUI
 struct GitsidianWidgetBundle: WidgetBundle {
     var body: some Widget {
         GitsidianWidget()
+        GitsidianLockWidget()
     }
 }

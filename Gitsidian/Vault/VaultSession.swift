@@ -97,9 +97,9 @@ final class VaultSession {
         publishWidgets()
     }
 
-    var widgetFiles: [String] { files.filter(WidgetFile.isWidget) }
+    var widgetFiles: [String] { files.filter(WidgetFile.isAnyWidget) }
 
-    /// Hands every `*.gitsidian.widget` file, as it is on disk now, to the home-screen widget.
+    /// Hands every `*.gitsidian.widget` and `*.gitsidian.lock` file, as it is on disk now, to the widgets.
     func publishWidgets() {
         guard isCloned else { return }
         let paths = widgetFiles
@@ -241,7 +241,7 @@ final class VaultSession {
         try? fm.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? Data(text.utf8).write(to: u, options: .atomic)
         localChange()
-        if WidgetFile.isWidget(path) { publishWidgets() }
+        if WidgetFile.isAnyWidget(path) { publishWidgets() }
     }
 
     func writeData(_ path: String, _ data: Data) {
@@ -283,14 +283,15 @@ final class VaultSession {
         return path
     }
 
-    /// Creates `<name>.gitsidian.widget` from the starter template.
+    /// Creates `<name>.gitsidian.widget` (or `<name>.gitsidian.lock`) from its starter template.
     @discardableResult
-    func createWidget(in folder: String, name: String?) -> String? {
-        let base = Links.sanitize(name ?? "Widget")
-        let path = uniquePath(folder: folder, base: base, ext: String(WidgetFile.suffix.dropFirst()))
+    func createWidget(in folder: String, name: String?, lock: Bool = false) -> String? {
+        let base = Links.sanitize(name ?? (lock ? "Lock Screen" : "Widget"))
+        let path = uniquePath(folder: folder, base: base, ext: String((lock ? WidgetFile.lockSuffix : WidgetFile.suffix).dropFirst()))
         let u = url(path)
+        let text = lock ? LockTemplate.starter(title: base) : WidgetTemplate.starter(title: base)
         try? fm.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
-        guard (try? Data(WidgetTemplate.starter(title: base).utf8).write(to: u, options: .withoutOverwriting)) != nil else { return nil }
+        guard (try? Data(text.utf8).write(to: u, options: .withoutOverwriting)) != nil else { return nil }
         localChange(treeChanged: true)
         return path
     }
@@ -345,6 +346,7 @@ final class VaultSession {
         guard !name.isEmpty else { return false }
         if !isFolder(path), FileKind(path: path) == .markdown, !name.lowercased().hasSuffix(".md") { name += ".md" }
         if !isFolder(path), FileKind(path: path) == .widget, !WidgetFile.isWidget(name) { name += WidgetFile.suffix }
+        if !isFolder(path), FileKind(path: path) == .lockWidget, !WidgetFile.isLock(name) { name += WidgetFile.lockSuffix }
         let dir = (path as NSString).deletingLastPathComponent
         return move(path, to: dir.isEmpty ? name : "\(dir)/\(name)")
     }
@@ -394,7 +396,7 @@ final class VaultSession {
         let q = query.trimmingCharacters(in: .whitespaces)
         guard q.count >= 2 else { return [] }
         var out: [SearchHit] = []
-        for f in visibleFiles where [.markdown, .text, .widget].contains(FileKind(path: f)) {
+        for f in visibleFiles where [.markdown, .text, .widget, .lockWidget].contains(FileKind(path: f)) {
             let text = readText(f)
             let nameHit = f.localizedCaseInsensitiveContains(q)
             let lines = text.split(separator: "\n").filter { $0.localizedCaseInsensitiveContains(q) }.prefix(3).map {
