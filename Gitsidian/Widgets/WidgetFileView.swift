@@ -1,10 +1,11 @@
 import SwiftUI
 import WebKit
 
-/// A `*.gitsidian.widget` file: live preview at each widget size, or the source.
+/// A `*.gitsidian.widget` or `*.gitsidian.lock` file: live preview at each widget size, or the source.
 struct WidgetFileView: View {
     let session: VaultSession
     let path: String
+    var lock = false
     @State private var showCode = false
 
     var body: some View {
@@ -19,6 +20,8 @@ struct WidgetFileView: View {
             .padding(.vertical, 8)
             if showCode {
                 TextFileView(session: session, path: path, markdown: false, reading: false)
+            } else if lock {
+                LockPreview(session: session, path: path)
             } else {
                 WidgetPreview(session: session, path: path)
             }
@@ -32,19 +35,13 @@ struct WidgetPreview: View {
 
     enum Family: String, CaseIterable, Identifiable {
         case small, medium, large
-        case rectangular, circular, inline
         var id: String { rawValue }
-        static let homeScreen: [Family] = [.small, .medium, .large]
-        var accessory: AccessoryFamily? { AccessoryFamily(rawValue: rawValue) }
         /// Typical iPhone widget sizes in points.
         var size: CGSize {
             switch self {
             case .small: return CGSize(width: 170, height: 170)
             case .medium: return CGSize(width: 364, height: 170)
             case .large: return CGSize(width: 364, height: 382)
-            case .rectangular: return CGSize(width: 172, height: 76)
-            case .circular: return CGSize(width: 76, height: 76)
-            case .inline: return CGSize(width: 234, height: 22)
             }
         }
     }
@@ -57,15 +54,11 @@ struct WidgetPreview: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                ForEach(Family.homeScreen) { family in
+                ForEach(Family.allCases) { family in
                     VStack(alignment: .leading, spacing: 6) {
                         Text(family.rawValue.capitalized).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                         frame(family)
                     }
-                }
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Lock Screen (rectangular, circular, inline)").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    lockScreen
                 }
                 if fullView != nil {
                     Button { showFullView = true } label: { Label("Full view (shown when the widget is tapped)", systemImage: "doc.richtext") }
@@ -86,45 +79,6 @@ struct WidgetPreview: View {
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showFullView = false } } }
             }
         }
-    }
-
-    /// Lock Screen widgets render monochrome on a wallpaper; this approximates it.
-    private var lockScreen: some View {
-        VStack(spacing: 12) {
-            accessoryFrame(.inline)
-            HStack(spacing: 12) {
-                accessoryFrame(.circular)
-                accessoryFrame(.rectangular)
-            }
-        }
-        .padding(16)
-        .frame(width: Family.medium.size.width)
-        .background(LinearGradient(colors: [.indigo, .black], startPoint: .top, endPoint: .bottom),
-                    in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .environment(\.colorScheme, .dark)
-    }
-
-    @ViewBuilder
-    private func accessoryFrame(_ family: Family) -> some View {
-        let content: AnyView = {
-            switch results[family] {
-            case .none:
-                return AnyView(ProgressView())
-            case .failure:
-                return AnyView(Label("Widget error", systemImage: "exclamationmark.triangle").font(.caption))
-            case .success(let program):
-                return AnyView(AccessoryProgramView(program: program, family: family.accessory ?? .rectangular))
-            }
-        }()
-        content
-            .foregroundStyle(.white)
-            .saturation(0)
-            .frame(width: family.size.width, height: family.size.height,
-                   alignment: family == .rectangular ? .topLeading : .center)
-            .background {
-                if family == .circular { Circle().fill(.white.opacity(0.18)) }
-            }
-            .clipShape(family == .circular ? AnyShape(Circle()) : AnyShape(Rectangle()))
     }
 
     @ViewBuilder
@@ -180,4 +134,100 @@ struct HTMLView: UIViewRepresentable {
         return WKWebView(frame: .zero, configuration: config)
     }
     func updateUIView(_ v: WKWebView, context: Context) { v.loadHTMLString(html, baseURL: nil) }
+}
+
+/// A `*.gitsidian.lock` file at the three Lock Screen sizes, on a dark wallpaper and in one tint,
+/// roughly as the Lock Screen draws it.
+struct LockPreview: View {
+    let session: VaultSession
+    let path: String
+
+    @State private var results: [LockFamily: Result<LockProgram, Error>] = [:]
+
+    private static let sizes: [LockFamily: CGSize] = [
+        .rectangular: LockSize.rectangular, .circular: LockSize.circular, .inline: CGSize(width: 234, height: 22),
+    ]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                wallpaper
+                ForEach(errors, id: \.self) { message in
+                    Label(message, systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(.red)
+                }
+                Label("Add it from the Lock Screen: long-press › Customize › Lock Screen › tap the widget area › Gitsidian › Lock Screen widget, then pick this file.",
+                      systemImage: "info.circle")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+            .padding()
+            .frame(maxWidth: .infinity)
+        }
+        .task(id: session.diskVersion) { await run() }
+    }
+
+    private var errors: [String] {
+        var seen = Set<String>()
+        return LockFamily.allCases.compactMap { family -> String? in
+            guard case .failure(let e)? = results[family] else { return nil }
+            let m = e.localizedDescription
+            return seen.insert(m).inserted ? m : nil
+        }
+    }
+
+    private var wallpaper: some View {
+        VStack(spacing: 14) {
+            frame(.inline)
+            Text(Date(), format: .dateTime.hour().minute())
+                .font(.system(size: 64, weight: .bold, design: .rounded))
+            HStack(spacing: 12) {
+                frame(.circular)
+                frame(.rectangular)
+            }
+        }
+        .padding(.vertical, 24)
+        .frame(width: 364)
+        .background(LinearGradient(colors: [Color(white: 0.28), Color(white: 0.06)], startPoint: .top, endPoint: .bottom),
+                    in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .foregroundStyle(.white)
+        .environment(\.colorScheme, .dark)
+    }
+
+    @ViewBuilder
+    private func frame(_ family: LockFamily) -> some View {
+        let size = Self.sizes[family] ?? .zero
+        Group {
+            switch results[family] {
+            case .none: ProgressView()
+            case .failure: Image(systemName: "exclamationmark.triangle")
+            case .success(let program):
+                LockProgramView(program: program, family: family)
+                    .background {
+                        if family == .circular, program.circular?.wantsBackground ?? true {
+                            Circle().fill(.white.opacity(0.16))
+                        }
+                    }
+            }
+        }
+        .frame(width: size.width, height: size.height, alignment: family == .rectangular ? .topLeading : .center)
+        .saturation(0)
+        .overlay {
+            // Dashed outline of the widget's area, so empty space is visible while designing.
+            if family == .circular { Circle().strokeBorder(.white.opacity(0.18), style: StrokeStyle(lineWidth: 0.5, dash: [3])) }
+            else { RoundedRectangle(cornerRadius: 6).strokeBorder(.white.opacity(0.18), style: StrokeStyle(lineWidth: 0.5, dash: [3])) }
+        }
+    }
+
+    private func run() async {
+        let script = session.readText(path)
+        let config = session.config
+        let path = path
+        var out: [LockFamily: Result<LockProgram, Error>] = [:]
+        for family in LockFamily.allCases {
+            let ctx = WidgetFileContext(vaultID: config.id, repo: config.fullName, branch: config.branch, path: path, family: family.rawValue)
+            out[family] = await Task.detached(priority: .userInitiated) {
+                Result { try ScriptRunner.runLock(script: script, file: ctx) }
+            }.value
+        }
+        results = out
+    }
 }

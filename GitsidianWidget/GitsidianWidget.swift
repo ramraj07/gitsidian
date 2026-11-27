@@ -10,8 +10,7 @@ struct GitsidianWidget: Widget {
         }
         .configurationDisplayName("Vault widget")
         .description("Runs a .gitsidian.widget file from one of your vaults.")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge,
-                            .accessoryRectangular, .accessoryCircular, .accessoryInline])
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge])
         .contentMarginsDisabled()
     }
 }
@@ -60,36 +59,20 @@ struct Provider: AppIntentTimelineProvider {
         case .systemMedium: return "medium"
         case .systemLarge: return "large"
         case .systemExtraLarge: return "extraLarge"
-        default: return AccessoryFamily(f)?.rawValue ?? "medium"
+        default: return "medium"
         }
     }
 
-    /// Picks the configured file (default: the most recently changed), refreshes it from GitHub, runs it.
+    /// Picks the configured file, refreshes it from GitHub, runs it.
     static func makeEntry(id: String?, family: WidgetFamily, fetch: Bool) async -> WidgetEntry {
         let store = WidgetStore.shared
         let now = Date()
-        // Only ever the configured file. An unconfigured widget uses the sole file if there is exactly
-        // one, and otherwise asks to be configured, never "whichever changed last" (that made widgets swap).
-        let picked: WidgetRecord?
-        if let id {
-            picked = store.record(id: id)
-        } else {
-            let all = store.load()
-            picked = all.count == 1 ? all[0] : nil
-            if all.count > 1 { return WidgetEntry(date: now, content: .needsConfig) }
-        }
-        guard var record = picked else {
-            return WidgetEntry(date: now, content: id == nil ? .noFile : .error("This widget file is no longer in any vault. Edit the widget to pick another.", record: nil))
-        }
-
-        if fetch, let token = Keychain.read() {
-            // Offline or rate-limited: keep showing the cached script.
-            if case .found(let sha, let text)? = try? await RemoteFile.fetch(record, token: token), sha != record.baseSha {
-                record.script = text
-                record.baseSha = sha
-                record.updatedAt = now
-                store.update(record)
-            }
+        let record: WidgetRecord
+        switch RecordLoader.pick(id: id, lock: false) {
+        case .record(let r): record = await RecordLoader.refreshed(r, now: now, fetch: fetch)
+        case .needsConfig: return WidgetEntry(date: now, content: .needsConfig)
+        case .noFile: return WidgetEntry(date: now, content: .noFile)
+        case .gone: return WidgetEntry(date: now, content: .error("This widget file is no longer in any vault. Edit the widget to pick another.", record: nil))
         }
 
         guard let script = record.script else {
@@ -109,30 +92,10 @@ struct Provider: AppIntentTimelineProvider {
     }
 }
 
-extension AccessoryFamily {
-    init?(_ f: WidgetFamily) {
-        switch f {
-        case .accessoryRectangular: self = .rectangular
-        case .accessoryCircular: self = .circular
-        case .accessoryInline: self = .inline
-        default: return nil
-        }
-    }
-}
-
 struct GitsidianWidgetView: View {
     let entry: WidgetEntry
-    @Environment(\.widgetFamily) private var family
 
     var body: some View {
-        if let accessory = AccessoryFamily(family) {
-            AccessoryWidgetView(entry: entry, family: accessory)
-        } else {
-            homeScreen
-        }
-    }
-
-    private var homeScreen: some View {
         Group {
             switch entry.content {
             case .program(let program, let page, let record):
@@ -167,44 +130,34 @@ struct GitsidianWidgetView: View {
     }
 }
 
-/// Lock Screen: compact layout, no pager or buttons; a tap opens the file.
-struct AccessoryWidgetView: View {
-    let entry: WidgetEntry
-    let family: AccessoryFamily
+/// Finds the file a widget instance shows and keeps it fresh from GitHub. Shared by the Home
+/// Screen widget (`*.gitsidian.widget`) and the Lock Screen widget (`*.gitsidian.lock`).
+enum RecordLoader {
+    enum Pick { case record(WidgetRecord), noFile, needsConfig, gone }
 
-    var body: some View {
-        Group {
-            switch entry.content {
-            case .program(let program, _, let record):
-                AccessoryProgramView(program: program, family: family)
-                    .widgetURL(DeepLink.open(vault: record.vaultID, path: record.path))
-            case .noFile:
-                status("No widget file", detail: "Add a .gitsidian.widget file in Gitsidian.", symbol: "square.grid.2x2")
-            case .needsConfig:
-                status("Choose a file", detail: "Edit the widget to pick one.", symbol: "hand.tap")
-            case .error(let message, let record):
-                status("Widget error", detail: message, symbol: "exclamationmark.triangle")
-                    .widgetURL(record.flatMap { DeepLink.open(vault: $0.vaultID, path: $0.path) })
-            }
+    /// Only ever the configured file. An unconfigured widget uses the sole file of its kind if there
+    /// is exactly one, and otherwise asks to be configured, never "whichever changed last" (that made widgets swap).
+    static func pick(id: String?, lock: Bool) -> Pick {
+        let store = WidgetStore.shared
+        if let id {
+            guard let r = store.record(id: id), r.isLock == lock else { return .gone }
+            return .record(r)
         }
-        .containerBackground(for: .widget) {
-            if family == .circular { AccessoryWidgetBackground() } else { Color.clear }
-        }
+        let all = store.load().filter { $0.isLock == lock }
+        if all.count > 1 { return .needsConfig }
+        return all.first.map(Pick.record) ?? .noFile
     }
 
-    @ViewBuilder
-    private func status(_ title: String, detail: String, symbol: String) -> some View {
-        switch family {
-        case .inline:
-            Label(title, systemImage: symbol)
-        case .circular:
-            Image(systemName: symbol).font(.title2)
-        case .rectangular:
-            VStack(alignment: .leading, spacing: 1) {
-                Label(title, systemImage: symbol).font(.headline).lineLimit(1)
-                Text(detail).font(.caption).lineLimit(2)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    /// Offline or rate-limited: keeps the cached script.
+    static func refreshed(_ record: WidgetRecord, now: Date, fetch: Bool) async -> WidgetRecord {
+        var record = record
+        if fetch, let token = Keychain.read(),
+           case .found(let sha, let text)? = try? await RemoteFile.fetch(record, token: token), sha != record.baseSha {
+            record.script = text
+            record.baseSha = sha
+            record.updatedAt = now
+            WidgetStore.shared.update(record)
         }
+        return record
     }
 }

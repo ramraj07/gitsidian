@@ -1,5 +1,9 @@
 # Publishing a Gitsidian widget (for agents)
 
+> This page is for **Home Screen** widgets (`*.gitsidian.widget`). **Lock Screen** widgets are a
+> separate file type (`*.gitsidian.lock`) with their own small API, SVG support and a previewer:
+> see [`lockscreen.md`](lockscreen.md).
+
 **Publish = commit a file named `<Name>.gitsidian.widget` to the vault repo's synced branch and push.**
 The phone's widget fetches it from GitHub on its next refresh (≈every `refreshAfter` minutes, iOS-throttled). To update it, overwrite the whole file and commit again. Keep the same path, because the user picked the widget by its path.
 
@@ -34,7 +38,7 @@ w.refreshAfter(60);
 | `.button(label, url)` / `.button(label, {page: n})` | open a URL (see below) / switch page in place |
 | `.spacer()` | |
 | `gitsidian.note(path)` | URL that opens a vault file. `/x` = from the vault root, otherwise relative to this file. A name without `.md` resolves like `[[links]]`. Add `#Heading` or `#^block-id` to open at that section: `note("Plan#Next steps")`. Heading match ignores case/markup; to link a paragraph, end its line in the note with ` ^block-id`. |
-| `gitsidian.family` | `small medium large extraLarge app`, or Lock Screen `rectangular circular inline`; branch on it |
+| `gitsidian.family` | `small medium large extraLarge app`; branch on it |
 | `gitsidian.path` `.repo` `.branch` | |
 
 `kondai.widget()` is an alias. Kondai scripts work unchanged.
@@ -51,7 +55,6 @@ w.refreshAfter(60);
 - Sizes (pt, before 12 pt padding): small 170×170, medium 364×170, large 364×382. **No scrolling.** Overflow gets clipped, so paginate.
 - Shape: header row → content → `spacer()` → buttons. Medium has room for ~4 list rows; large ~10.
 - Keep canvas width ≤ 300 (≤ 140 on small). Use `lines: 1` on text that could wrap.
-- **Lock Screen** (`rectangular` ≈160×72, `circular` 76×76, `inline` one line): only page 1, no buttons/links (a tap opens the file), monochrome. Give each its own tiny layout: rectangular = headline + ≤2 short `lines: 1` texts; circular = one `gauge` or a short number; inline = one short `text` (texts on the page are joined with ` · `).
 - Dates: prefer `relativeDate` or plain text ("Due Fri 3 pm"). Use `timer`/`progress` only for a countdown the user wants to watch (a meeting starting, a timer); a seconds counter is distracting. Never `relativeDate(new Date())` as an "updated" stamp.
 
 ## Checklist

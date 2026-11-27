@@ -43,7 +43,6 @@ struct PageView: View {
 struct NodeView: View {
     let node: WidgetNode
     @Environment(\.widgetPageButton) private var pageButton
-    @Environment(\.widgetCompact) private var compact
 
     init(node: WidgetNode) { self.node = node }
 
@@ -55,13 +54,11 @@ struct NodeView: View {
             imageView(img)
         case .canvas(let c):
             if let ui = UIImage(data: c.png, scale: 3) {
-                // Lock Screen: shrink to fit instead of overflowing.
                 Image(uiImage: ui).resizable().aspectRatio(contentMode: .fit)
-                    .frame(width: compact ? nil : CGFloat(c.width), height: compact ? nil : CGFloat(c.height))
-                    .frame(maxWidth: compact ? CGFloat(c.width) : nil, maxHeight: compact ? CGFloat(c.height) : nil)
+                    .frame(width: c.width, height: c.height)
             }
         case .timer(let date):
-            Text(date, style: .timer).font(compact ? .headline.monospacedDigit() : .body.monospacedDigit())
+            Text(date, style: .timer).font(.body.monospacedDigit())
         case .relativeDate(let date):
             RelativeDateText(date: date)
         case .progress(let start, let end):
@@ -77,27 +74,24 @@ struct NodeView: View {
         case .list(let items):
             listView(items)
         case .row(let children):
-            HStack(alignment: .center, spacing: compact ? 4 : 6) {
+            HStack(alignment: .center, spacing: 6) {
                 ForEach(Array(children.enumerated()), id: \.offset) { _, c in NodeView(node: c) }
             }
         case .column(let children):
-            VStack(alignment: .leading, spacing: compact ? 1 : 4) {
+            VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(children.enumerated()), id: \.offset) { _, c in NodeView(node: c) }
             }
         case .spacer:
             Spacer(minLength: 0)
         case .link(let label, let url):
-            // The Lock Screen only takes a tap on the whole widget, so buttons are left out there.
-            if !compact {
-                Link(destination: url) {
-                    Text(label)
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(.tint.opacity(0.18), in: Capsule())
-                }
+            Link(destination: url) {
+                Text(label)
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(.tint.opacity(0.18), in: Capsule())
             }
         case .pageButton(let label, let page):
-            if !compact { pageButton.make(label, page) }
+            pageButton.make(label, page)
         case .chart(let spec):
             chartView(spec)
         }
@@ -107,7 +101,7 @@ struct NodeView: View {
     private func textView(_ s: String, _ style: TextStyle) -> some View {
         let color: Color = style.color.flatMap(Color.init(css:)) ?? .primary
         Text(s)
-            .font(compact ? style.font.compactFont : style.font.swiftUIFont)
+            .font(style.font.swiftUIFont)
             .foregroundStyle(color)
             .lineLimit(style.lines)
             .multilineTextAlignment(style.align?.textAlignment ?? .leading)
@@ -127,16 +121,16 @@ struct NodeView: View {
 
     @ViewBuilder
     private func listView(_ items: [ListItem]) -> some View {
-        VStack(alignment: .leading, spacing: compact ? 0 : 3) {
+        VStack(alignment: .leading, spacing: 3) {
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                 let row = HStack(alignment: .firstTextBaseline) {
-                    Text(item.title).font(compact ? .caption.weight(.medium) : .subheadline.weight(.medium)).lineLimit(1)
+                    Text(item.title).font(.subheadline.weight(.medium)).lineLimit(1)
                     Spacer(minLength: 4)
                     if let d = item.detail {
-                        Text(d).font(compact ? .caption2 : .caption).foregroundStyle(.secondary).lineLimit(1)
+                        Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     }
                 }
-                if let url = item.url, !compact {
+                if let url = item.url {
                     Link(destination: url) { row }.buttonStyle(.plain)
                 } else {
                     row
@@ -168,8 +162,7 @@ struct NodeView: View {
                 AxisValueLabel().font(.caption2)
             }
         }
-        .chartXAxis(compact ? .hidden : .automatic)
-        .frame(minHeight: compact ? 0 : 40)
+        .frame(minHeight: 40)
     }
 }
 
@@ -178,18 +171,6 @@ extension TextFont {
         switch self {
         case .largeTitle: return .largeTitle.weight(.bold)
         case .title: return .title2.weight(.semibold)
-        case .headline: return .headline
-        case .body: return .body
-        case .caption: return .caption
-        case .mono: return .system(.body, design: .monospaced)
-        }
-    }
-
-    /// Lock Screen type: a rectangular widget fits about three body lines.
-    var compactFont: Font {
-        switch self {
-        case .largeTitle: return .title2.weight(.bold)
-        case .title: return .title3.weight(.semibold)
         case .headline: return .headline
         case .body: return .body
         case .caption: return .caption
@@ -231,6 +212,7 @@ struct RelativeDateText: View {
         Self.text(date).font(.body)
     }
 
+    /// As a `Text`, so it can be joined with other text (Lock Screen inline widgets).
     static func text(_ date: Date) -> Text {
         if #available(iOS 18.0, *) {
             return Text(.currentDate, format: .reference(to: date,

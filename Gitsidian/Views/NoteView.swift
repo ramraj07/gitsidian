@@ -11,6 +11,7 @@ struct NoteView: View {
         case .markdown: TextFileView(session: session, path: path, markdown: true, reading: reading)
         case .text: TextFileView(session: session, path: path, markdown: false, reading: false)
         case .widget: WidgetFileView(session: session, path: path)
+        case .lockWidget: WidgetFileView(session: session, path: path, lock: true)
         case .image: ImageFileView(url: session.url(path))
         case .pdf: PDFFileView(url: session.url(path))
         case .other:

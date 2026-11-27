@@ -24,14 +24,11 @@ enum WidgetTemplate {
         //                                      shortcuts://run-shortcut?name=…, spotify:…, any app's URL scheme
         //   gitsidian.note("Some note")        -> URL that opens a note in Gitsidian
         //   gitsidian.note("Note#Heading")     -> …scrolled to a section ("Note#^block-id" for a ^block-id line)
-        //   gitsidian.family                   -> "small" | "medium" | "large" | "extraLarge" | "app",
-        //                                         or on the Lock Screen "rectangular" | "circular" | "inline"
-        //                                         (Lock Screen: first page only, no buttons, inline = one line of text)
+        //   gitsidian.family                   -> "small" | "medium" | "large" | "extraLarge" | "app"
         //   gitsidian.path / .repo / .branch
 
         const w = gitsidian.widget();
         const big = gitsidian.family === "large" || gitsidian.family === "extraLarge";
-        const lock = ["rectangular", "circular", "inline"].includes(gitsidian.family);
 
         const week = [
           { x: "Mon", y: 3 }, { x: "Tue", y: 5 }, { x: "Wed", y: 2 },
@@ -40,57 +37,43 @@ enum WidgetTemplate {
         const done = week.reduce((s, d) => s + d.y, 0);
         const goal = 30;
 
-        if (lock) {
-          // Lock Screen: one small page. A tap opens this file, so no buttons.
-          const p = w.page();
-          if (gitsidian.family === "circular") {
-            p.gauge(done, { min: 0, max: goal, label: "notes" });
-          } else if (gitsidian.family === "inline") {
-            p.text(done + "/" + goal + " notes this week");
-          } else {
-            p.text("\(t)", { font: "headline", lines: 1 });
-            p.text(done + " / " + goal + " notes", { lines: 1 });
-            p.text("this week", { font: "caption", color: "#8e8e93", lines: 1 });
-          }
-        } else {
-          // Page 1: headline number, ring and a chart.
-          const p1 = w.page();
-          p1.row((r) => {
-            r.text("\(t)", { font: "headline", lines: 1 });
+        // Page 1: headline number, ring and a chart.
+        const p1 = w.page();
+        p1.row((r) => {
+          r.text("\(t)", { font: "headline", lines: 1 });
+        });
+        p1.row((r) => {
+          r.canvas(64, 64, (ctx) => {
+            const frac = Math.min(done / goal, 1);
+            ctx.lineWidth = 8;
+            ctx.strokeStyle = "#8e8e9340";
+            ctx.beginPath(); ctx.arc(32, 32, 26, 0, Math.PI * 2); ctx.stroke();
+            ctx.strokeStyle = "#7c5cff";
+            ctx.beginPath(); ctx.arc(32, 32, 26, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2); ctx.stroke();
+            ctx.fillStyle = "#7c5cff";
+            ctx.font = "bold 15px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText(Math.round(frac * 100) + "%", 32, 37);
           });
-          p1.row((r) => {
-            r.canvas(64, 64, (ctx) => {
-              const frac = Math.min(done / goal, 1);
-              ctx.lineWidth = 8;
-              ctx.strokeStyle = "#8e8e9340";
-              ctx.beginPath(); ctx.arc(32, 32, 26, 0, Math.PI * 2); ctx.stroke();
-              ctx.strokeStyle = "#7c5cff";
-              ctx.beginPath(); ctx.arc(32, 32, 26, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2); ctx.stroke();
-              ctx.fillStyle = "#7c5cff";
-              ctx.font = "bold 15px sans-serif";
-              ctx.textAlign = "center";
-              ctx.fillText(Math.round(frac * 100) + "%", 32, 37);
-            });
-            r.column((c) => {
-              c.text(done + " / " + goal, { font: "title" });
-              c.text("notes written this week", { font: "caption", color: "#8e8e93" });
-            });
+          r.column((c) => {
+            c.text(done + " / " + goal, { font: "title" });
+            c.text("notes written this week", { font: "caption", color: "#8e8e93" });
           });
-          if (big) p1.chart({ type: "bar", data: week, color: "#7c5cff" });
-          p1.spacer();
-          p1.button("Open note", gitsidian.note("README"));
+        });
+        if (big) p1.chart({ type: "bar", data: week, color: "#7c5cff" });
+        p1.spacer();
+        p1.button("Open note", gitsidian.note("README"));
 
-          // Page 2: a list of tappable notes.
-          const p2 = w.page();
-          p2.text("Up next", { font: "headline" });
-          p2.list([
-            { title: "🟣 Plan the week", detail: "Mon", url: gitsidian.note("README") },
-            { title: "🟢 Review inbox", detail: "Today" },
-            { title: "🔵 Write the summary", detail: "Fri" },
-          ]);
-          p2.spacer();
-          p2.text("More than one page adds a ‹ 1/2 › pager at the bottom.", { font: "caption", color: "#8e8e93", lines: 1 });
-        }
+        // Page 2: a list of tappable notes.
+        const p2 = w.page();
+        p2.text("Up next", { font: "headline" });
+        p2.list([
+          { title: "🟣 Plan the week", detail: "Mon", url: gitsidian.note("README") },
+          { title: "🟢 Review inbox", detail: "Today" },
+          { title: "🔵 Write the summary", detail: "Fri" },
+        ]);
+        p2.spacer();
+        p2.text("More than one page adds a ‹ 1/2 › pager at the bottom.", { font: "caption", color: "#8e8e93", lines: 1 });
 
         w.refreshAfter(60);
 
