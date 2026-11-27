@@ -13,6 +13,44 @@ struct PageButtonBuilder {
     }
 }
 
+/// How a `checkbox` node becomes a view. The widget wraps `CheckboxLabel` in
+/// `Button(intent: ToggleTaskIntent)`; the in-app preview edits the file directly.
+struct CheckboxBuilder {
+    let make: (_ box: CheckboxNode) -> AnyView
+    init(_ make: @escaping (_ box: CheckboxNode) -> AnyView) { self.make = make }
+
+    static let inert = CheckboxBuilder { AnyView(CheckboxLabel(box: $0)) }
+}
+
+/// A task row: circle or tick, the text (struck through once done), and the detail on the right.
+struct CheckboxLabel: View {
+    let box: CheckboxNode
+
+    init(box: CheckboxNode) { self.box = box }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: box.checked ? "checkmark.circle.fill" : "circle")
+                .font(.subheadline)
+                .foregroundStyle(box.checked ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+            Text(box.text)
+                .font(.subheadline.weight(.medium))
+                .strikethrough(box.checked)
+                .foregroundStyle(box.checked ? .secondary : .primary)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            if let d = box.detail {
+                Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+private struct CheckboxBuilderKey: EnvironmentKey {
+    static let defaultValue = CheckboxBuilder.inert
+}
+
 private struct PageButtonBuilderKey: EnvironmentKey {
     static let defaultValue = PageButtonBuilder.inert
 }
@@ -21,6 +59,11 @@ extension EnvironmentValues {
     var widgetPageButton: PageButtonBuilder {
         get { self[PageButtonBuilderKey.self] }
         set { self[PageButtonBuilderKey.self] = newValue }
+    }
+
+    var widgetCheckbox: CheckboxBuilder {
+        get { self[CheckboxBuilderKey.self] }
+        set { self[CheckboxBuilderKey.self] = newValue }
     }
 }
 
@@ -43,6 +86,7 @@ struct PageView: View {
 struct NodeView: View {
     let node: WidgetNode
     @Environment(\.widgetPageButton) private var pageButton
+    @Environment(\.widgetCheckbox) private var checkbox
 
     init(node: WidgetNode) { self.node = node }
 
@@ -94,6 +138,8 @@ struct NodeView: View {
             pageButton.make(label, page)
         case .chart(let spec):
             chartView(spec)
+        case .checkbox(let box):
+            checkbox.make(box)
         }
     }
 

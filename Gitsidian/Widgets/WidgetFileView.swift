@@ -47,6 +47,8 @@ struct WidgetPreview: View {
     @State private var pages: [Family: Int] = [:]
     @State private var fullView: String?
     @State private var showFullView = false
+    /// Ticks on tasks in other notes; the script's baked-in `checked` doesn't change for those.
+    @State private var ticked: [String: Bool] = [:]
 
     var body: some View {
         ScrollView {
@@ -87,8 +89,16 @@ struct WidgetPreview: View {
             case .failure(let e):
                 return AnyView(StatusView(title: "Widget error", detail: e.localizedDescription, symbol: "exclamationmark.triangle"))
             case .success(let program):
+                let shown = program.mapCheckboxes { box in
+                    var b = box
+                    if let c = ticked[box.path + "\n" + box.text] { b.checked = c }
+                    return b
+                }
                 return AnyView(
-                    ProgramView(program: program, pageNumber: pages[family] ?? 1)
+                    ProgramView(program: shown, pageNumber: pages[family] ?? 1)
+                        .environment(\.widgetCheckbox, CheckboxBuilder { box in
+                            AnyView(Button { toggle(box) } label: { CheckboxLabel(box: box) }.buttonStyle(.plain))
+                        })
                         .environment(\.widgetPageButton, PageButtonBuilder { label, page in
                             AnyView(Button { pages[family] = page } label: {
                                 Text(label)
@@ -105,6 +115,20 @@ struct WidgetPreview: View {
             .frame(width: family.size.width, height: family.size.height, alignment: .topLeading)
             .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    /// Same edit the Home Screen widget commits, made to the local file; normal sync pushes it.
+    private func toggle(_ box: CheckboxNode) {
+        guard session.exists(box.path) else { return }
+        session.flushEditors()
+        if case .changed(let text) = TaskLines.set(box.text, checked: !box.checked, in: session.readText(box.path)) {
+            session.writeText(box.path, text)
+        }
+        if box.path == path {
+            Task { await run() }
+        } else {
+            ticked[box.path + "\n" + box.text] = !box.checked
+        }
     }
 
     private func run() async {

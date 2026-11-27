@@ -12,6 +12,8 @@ import UIKit
     func widget() -> WidgetJS
     /// URL that opens a vault file in Gitsidian; relative paths resolve against the widget file's folder.
     func note(_ path: JSValue?) -> String
+    /// Parses markdown task lines ("- [ ] text") into [{text, checked}].
+    func tasks(_ markdown: JSValue?) -> JSValue?
     var path: String { get }
     var repo: String { get }
     var branch: String { get }
@@ -40,6 +42,8 @@ import UIKit
     func spacer() -> NodeJS
     func button(_ label: JSValue?, _ target: JSValue?) -> NodeJS
     func chart(_ spec: JSValue?) -> NodeJS
+    func checkbox(_ label: JSValue?, _ opts: JSValue?) -> NodeJS
+    func checklist(_ items: JSValue?, _ opts: JSValue?) -> NodeJS
 }
 
 @objc protocol NodeExports: JSExport {
@@ -54,14 +58,16 @@ final class RuntimeState {
 
     let deadline: Date
     let now: Date
+    let file: WidgetFileContext
     var widget: WidgetJS?
     var pages: [ContainerJS] = []
     var fullView: String?
     var refreshAfter: Double?
 
-    init(deadline: Date, now: Date) {
+    init(deadline: Date, now: Date, file: WidgetFileContext = .preview) {
         self.deadline = deadline
         self.now = now
+        self.file = file
     }
 
     /// Called from every native entry point. A script that only loops in JS cannot be
@@ -106,6 +112,13 @@ final class RuntimeState {
     func note(_ path: JSValue?) -> String {
         guard let raw = JSArgs.string(path), !raw.isEmpty else { return "" }
         return file.noteURL(raw)?.absoluteString ?? ""
+    }
+
+    func tasks(_ markdown: JSValue?) -> JSValue? {
+        guard let ctx = JSContext.current() else { return nil }
+        let md = JSArgs.string(markdown) ?? ""
+        let list = TaskLines.parse(md).filter { !$0.text.isEmpty }.map { ["text": $0.text, "checked": $0.checked] as [String: Any] }
+        return JSValue(object: list, in: ctx)
     }
 
     func widget() -> WidgetJS {
@@ -156,7 +169,9 @@ final class RuntimeState {
 
     init(state: RuntimeState) { self.state = state }
 
-    private func add(_ node: WidgetNode) -> NodeJS {
+    private func add(_ node: WidgetNode) -> NodeJS { append(node) }
+
+    fileprivate func append(_ node: WidgetNode) -> NodeJS {
         children.append(node)
         return NodeJS(node)
     }
@@ -345,6 +360,74 @@ final class RuntimeState {
             }
         }
         return add(.chart(ChartSpec(type: type, data: points, color: JSArgs.string(s.forProperty("color")))))
+    }
+}
+
+// MARK: - Checkboxes
+
+extension ContainerJS {
+    // checkbox(text, {checked, detail, note})   no note = a "- [ ] text" line in this widget file
+    func checkbox(_ label: JSValue?, _ opts: JSValue?) -> NodeJS {
+        guard state.checkBudget() else { return NodeJS(.spacer) }
+        guard let text = JSArgs.string(label)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
+            state.throwJS("checkbox(): expected the task's text")
+            return NodeJS(.spacer)
+        }
+        let o = opts.flatMap { $0.isObject ? $0 : nil }
+        guard let node = makeCheckbox(text: text, checked: o.map { $0.forProperty("checked").toBool() } ?? false,
+                                      detail: o.flatMap { JSArgs.string($0.forProperty("detail")) },
+                                      note: o.flatMap { JSArgs.string($0.forProperty("note")) }, name: "checkbox") else {
+            return NodeJS(.spacer)
+        }
+        return append(.checkbox(node))
+    }
+
+    // checklist(markdown | [{text, checked, detail, note}] | ["- [ ] text"], {note})
+    func checklist(_ items: JSValue?, _ opts: JSValue?) -> NodeJS {
+        guard state.checkBudget() else { return NodeJS(.spacer) }
+        let defaultNote = opts.flatMap { $0.isObject ? JSArgs.string($0.forProperty("note")) : nil }
+        typealias Row = (text: String, checked: Bool, detail: String?, note: String?)
+        func row(_ t: TaskLines.Task) -> Row { (t.text, t.checked, nil, nil) }
+        var rows: [Row] = []
+        if let v = items, v.isString {
+            rows = TaskLines.parse(v.toString() ?? "").map(row)
+        } else if let arr = items, arr.isArray {
+            let n = Int(arr.forProperty("length").toInt32())
+            for i in 0..<Swift.min(n, 50) {
+                guard let item = arr.atIndex(i) else { continue }
+                if item.isString {
+                    let s = item.toString() ?? ""
+                    let fallback: Row = (s, false, nil, nil)
+                    rows.append(TaskLines.parse(s).first.map(row) ?? fallback)
+                } else if item.isObject {
+                    rows.append((JSArgs.string(item.forProperty("text")) ?? JSArgs.string(item.forProperty("title")) ?? "",
+                                 item.forProperty("checked").toBool(),
+                                 JSArgs.string(item.forProperty("detail")),
+                                 JSArgs.string(item.forProperty("note"))))
+                }
+            }
+        } else {
+            state.throwJS("checklist(): expected a markdown string or an array of tasks")
+            return NodeJS(.spacer)
+        }
+        var nodes: [WidgetNode] = []
+        for r in rows.prefix(50) {
+            let text = r.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { continue }
+            guard let node = makeCheckbox(text: text, checked: r.checked, detail: r.detail, note: r.note ?? defaultNote, name: "checklist") else {
+                return NodeJS(.spacer)
+            }
+            nodes.append(.checkbox(node))
+        }
+        return append(.column(nodes))
+    }
+
+    private func makeCheckbox(text: String, checked: Bool, detail: String?, note: String?, name: String) -> CheckboxNode? {
+        guard let path = state.file.taskFilePath(note) else {
+            state.throwJS("\(name)(): note must be a vault path")
+            return nil
+        }
+        return CheckboxNode(text: text, checked: checked, detail: detail, path: path)
     }
 }
 

@@ -17,6 +17,7 @@ indirect enum WidgetNode: Equatable, Codable, Sendable {
     case link(label: String, url: URL)
     case pageButton(label: String, page: Int)   // 1-based page number
     case chart(ChartSpec)
+    case checkbox(CheckboxNode)
 
     /// Short kind name, handy for test assertions.
     var kind: String {
@@ -35,6 +36,7 @@ indirect enum WidgetNode: Equatable, Codable, Sendable {
         case .link: return "link"
         case .pageButton: return "pageButton"
         case .chart: return "chart"
+        case .checkbox: return "checkbox"
         }
     }
 
@@ -139,6 +141,34 @@ struct ChartSpec: Equatable, Codable, Sendable {
     }
 }
 
+/// A tappable checkbox bound to a markdown task line (`- [ ] text`) in a vault file. Tapping it
+/// in the widget rewrites that line and commits it to GitHub (ToggleTaskIntent).
+struct CheckboxNode: Equatable, Codable, Sendable {
+    var text: String
+    var checked: Bool
+    var detail: String?
+    /// Vault-relative path of the file holding the task line: the widget file itself, or a note.
+    var path: String
+    init(text: String, checked: Bool, detail: String? = nil, path: String) {
+        self.text = text
+        self.checked = checked
+        self.detail = detail
+        self.path = path
+    }
+}
+
+extension WidgetNode {
+    /// The same tree with every checkbox passed through `f` (used to show taps that haven't synced yet).
+    func mapCheckboxes(_ f: (CheckboxNode) -> CheckboxNode) -> WidgetNode {
+        switch self {
+        case .checkbox(let c): return .checkbox(f(c))
+        case .row(let c): return .row(c.map { $0.mapCheckboxes(f) })
+        case .column(let c): return .column(c.map { $0.mapCheckboxes(f) })
+        default: return self
+        }
+    }
+}
+
 /// Everything one run of the script produced.
 struct WidgetProgram: Equatable, Codable, Sendable {
     var pages: [[WidgetNode]]
@@ -157,6 +187,12 @@ struct WidgetProgram: Equatable, Codable, Sendable {
     func clampedPageNumber(_ number: Int) -> Int {
         guard !pages.isEmpty else { return 1 }
         return Swift.max(1, Swift.min(number, pages.count))
+    }
+
+    func mapCheckboxes(_ f: (CheckboxNode) -> CheckboxNode) -> WidgetProgram {
+        var p = self
+        p.pages = pages.map { $0.map { $0.mapCheckboxes(f) } }
+        return p
     }
 
     func page(number: Int) -> [WidgetNode] {

@@ -39,7 +39,7 @@ enum ScriptRunner {
             throw ScriptError.internalFailure("could not create JSContext")
         }
         context.name = "gitsidian.widget"
-        let state = RuntimeState(deadline: Date().addingTimeInterval(timeBudget), now: now)
+        let state = RuntimeState(deadline: Date().addingTimeInterval(timeBudget), now: now, file: file)
 
         var captured: (String, Int?)?
         context.exceptionHandler = { _, exception in
