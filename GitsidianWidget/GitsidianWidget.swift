@@ -10,7 +10,8 @@ struct GitsidianWidget: Widget {
         }
         .configurationDisplayName("Vault widget")
         .description("Runs a .gitsidian.widget file from one of your vaults.")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge])
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge,
+                            .accessoryRectangular, .accessoryCircular, .accessoryInline])
         .contentMarginsDisabled()
     }
 }
@@ -59,7 +60,7 @@ struct Provider: AppIntentTimelineProvider {
         case .systemMedium: return "medium"
         case .systemLarge: return "large"
         case .systemExtraLarge: return "extraLarge"
-        default: return "medium"
+        default: return AccessoryFamily(f)?.rawValue ?? "medium"
         }
     }
 
@@ -108,10 +109,30 @@ struct Provider: AppIntentTimelineProvider {
     }
 }
 
+extension AccessoryFamily {
+    init?(_ f: WidgetFamily) {
+        switch f {
+        case .accessoryRectangular: self = .rectangular
+        case .accessoryCircular: self = .circular
+        case .accessoryInline: self = .inline
+        default: return nil
+        }
+    }
+}
+
 struct GitsidianWidgetView: View {
     let entry: WidgetEntry
+    @Environment(\.widgetFamily) private var family
 
     var body: some View {
+        if let accessory = AccessoryFamily(family) {
+            AccessoryWidgetView(entry: entry, family: accessory)
+        } else {
+            homeScreen
+        }
+    }
+
+    private var homeScreen: some View {
         Group {
             switch entry.content {
             case .program(let program, let page, let record):
@@ -142,6 +163,48 @@ struct GitsidianWidgetView: View {
                 }
                 .buttonStyle(.plain)
             )
+        }
+    }
+}
+
+/// Lock Screen: compact layout, no pager or buttons; a tap opens the file.
+struct AccessoryWidgetView: View {
+    let entry: WidgetEntry
+    let family: AccessoryFamily
+
+    var body: some View {
+        Group {
+            switch entry.content {
+            case .program(let program, _, let record):
+                AccessoryProgramView(program: program, family: family)
+                    .widgetURL(DeepLink.open(vault: record.vaultID, path: record.path))
+            case .noFile:
+                status("No widget file", detail: "Add a .gitsidian.widget file in Gitsidian.", symbol: "square.grid.2x2")
+            case .needsConfig:
+                status("Choose a file", detail: "Edit the widget to pick one.", symbol: "hand.tap")
+            case .error(let message, let record):
+                status("Widget error", detail: message, symbol: "exclamationmark.triangle")
+                    .widgetURL(record.flatMap { DeepLink.open(vault: $0.vaultID, path: $0.path) })
+            }
+        }
+        .containerBackground(for: .widget) {
+            if family == .circular { AccessoryWidgetBackground() } else { Color.clear }
+        }
+    }
+
+    @ViewBuilder
+    private func status(_ title: String, detail: String, symbol: String) -> some View {
+        switch family {
+        case .inline:
+            Label(title, systemImage: symbol)
+        case .circular:
+            Image(systemName: symbol).font(.title2)
+        case .rectangular:
+            VStack(alignment: .leading, spacing: 1) {
+                Label(title, systemImage: symbol).font(.headline).lineLimit(1)
+                Text(detail).font(.caption).lineLimit(2)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
 }

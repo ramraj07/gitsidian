@@ -25,7 +25,7 @@ struct WidgetFileContext: Sendable {
     var repo: String           // owner/name
     var branch: String
     var path: String
-    var family: String         // small | medium | large | extraLarge | app
+    var family: String         // small | medium | large | extraLarge | app | rectangular | circular | inline
 
     static let preview = WidgetFileContext(vaultID: nil, repo: "", branch: "", path: "preview" + WidgetFile.suffix, family: "app")
 

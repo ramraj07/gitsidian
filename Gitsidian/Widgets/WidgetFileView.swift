@@ -32,13 +32,19 @@ struct WidgetPreview: View {
 
     enum Family: String, CaseIterable, Identifiable {
         case small, medium, large
+        case rectangular, circular, inline
         var id: String { rawValue }
+        static let homeScreen: [Family] = [.small, .medium, .large]
+        var accessory: AccessoryFamily? { AccessoryFamily(rawValue: rawValue) }
         /// Typical iPhone widget sizes in points.
         var size: CGSize {
             switch self {
             case .small: return CGSize(width: 170, height: 170)
             case .medium: return CGSize(width: 364, height: 170)
             case .large: return CGSize(width: 364, height: 382)
+            case .rectangular: return CGSize(width: 172, height: 76)
+            case .circular: return CGSize(width: 76, height: 76)
+            case .inline: return CGSize(width: 234, height: 22)
             }
         }
     }
@@ -51,11 +57,15 @@ struct WidgetPreview: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                ForEach(Family.allCases) { family in
+                ForEach(Family.homeScreen) { family in
                     VStack(alignment: .leading, spacing: 6) {
                         Text(family.rawValue.capitalized).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                         frame(family)
                     }
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Lock Screen (rectangular, circular, inline)").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    lockScreen
                 }
                 if fullView != nil {
                     Button { showFullView = true } label: { Label("Full view (shown when the widget is tapped)", systemImage: "doc.richtext") }
@@ -76,6 +86,45 @@ struct WidgetPreview: View {
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showFullView = false } } }
             }
         }
+    }
+
+    /// Lock Screen widgets render monochrome on a wallpaper; this approximates it.
+    private var lockScreen: some View {
+        VStack(spacing: 12) {
+            accessoryFrame(.inline)
+            HStack(spacing: 12) {
+                accessoryFrame(.circular)
+                accessoryFrame(.rectangular)
+            }
+        }
+        .padding(16)
+        .frame(width: Family.medium.size.width)
+        .background(LinearGradient(colors: [.indigo, .black], startPoint: .top, endPoint: .bottom),
+                    in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .environment(\.colorScheme, .dark)
+    }
+
+    @ViewBuilder
+    private func accessoryFrame(_ family: Family) -> some View {
+        let content: AnyView = {
+            switch results[family] {
+            case .none:
+                return AnyView(ProgressView())
+            case .failure:
+                return AnyView(Label("Widget error", systemImage: "exclamationmark.triangle").font(.caption))
+            case .success(let program):
+                return AnyView(AccessoryProgramView(program: program, family: family.accessory ?? .rectangular))
+            }
+        }()
+        content
+            .foregroundStyle(.white)
+            .saturation(0)
+            .frame(width: family.size.width, height: family.size.height,
+                   alignment: family == .rectangular ? .topLeading : .center)
+            .background {
+                if family == .circular { Circle().fill(.white.opacity(0.18)) }
+            }
+            .clipShape(family == .circular ? AnyShape(Circle()) : AnyShape(Rectangle()))
     }
 
     @ViewBuilder
