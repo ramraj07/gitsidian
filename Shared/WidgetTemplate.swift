@@ -22,6 +22,9 @@ enum WidgetTemplate {
         //   page.image(base64OrDataURL, {width, height, corner})
         //   page.button(label, url | {page: n})   url can open other apps: maps://?q=…, tel:…, https://…,
         //                                      shortcuts://run-shortcut?name=…, spotify:…, any app's URL scheme
+        //   page.checklist(`- [ ] task …`)     tappable tasks: a tap ticks the line in this file and commits it
+        //   page.checkbox(text, {checked, note: "Some note"})   …or ticks a "- [ ] text" line in a note
+        //   gitsidian.tasks(markdown)          -> [{text, checked}]
         //   gitsidian.note("Some note")        -> URL that opens a note in Gitsidian
         //   gitsidian.note("Note#Heading")     -> …scrolled to a section ("Note#^block-id" for a ^block-id line)
         //   gitsidian.family                   -> "small" | "medium" | "large" | "extraLarge" | "app"
@@ -64,14 +67,19 @@ enum WidgetTemplate {
         p1.spacer();
         p1.button("Open note", gitsidian.note("README"));
 
-        // Page 2: a list of tappable notes.
+        // Page 2: tasks you can tick on the Home Screen. A tap edits the lines below and commits.
+        const todo = `
+        - [ ] Plan the week
+        - [x] Review inbox
+        - [ ] Write the summary
+        `;
         const p2 = w.page();
-        p2.text("Up next", { font: "headline" });
-        p2.list([
-          { title: "🟣 Plan the week", detail: "Mon", url: gitsidian.note("README") },
-          { title: "🟢 Review inbox", detail: "Today" },
-          { title: "🔵 Write the summary", detail: "Fri" },
-        ]);
+        p2.row((r) => {
+          r.text("Up next", { font: "headline" });
+          r.spacer();
+          r.text(gitsidian.tasks(todo).filter((t) => !t.checked).length + " left", { font: "caption", color: "#8e8e93" });
+        });
+        p2.checklist(todo);
         p2.spacer();
         p2.text("More than one page adds a ‹ 1/2 › pager at the bottom.", { font: "caption", color: "#8e8e93", lines: 1 });
 

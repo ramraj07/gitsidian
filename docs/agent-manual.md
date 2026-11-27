@@ -36,12 +36,27 @@ w.refreshAfter(60);
 | `.canvas(w, h, ctx => …)` | Canvas2D subset: fill/stroke styles, rects, paths, `arc`, `roundRect`, `fillText`, transforms, `createLinearGradient` |
 | `.image(base64 or dataURL, {width, height, corner})` | |
 | `.button(label, url)` / `.button(label, {page: n})` | open a URL (see below) / switch page in place |
+| `.checklist(md \| [{text, checked, detail, note}], {note})` | tappable tasks; a tap commits `[ ]`↔`[x]` to the file. See below |
+| `.checkbox(text, {checked, detail, note})` | one tappable task |
 | `.spacer()` | |
 | `gitsidian.note(path)` | URL that opens a vault file. `/x` = from the vault root, otherwise relative to this file. A name without `.md` resolves like `[[links]]`. Add `#Heading` or `#^block-id` to open at that section: `note("Plan#Next steps")`. Heading match ignores case/markup; to link a paragraph, end its line in the note with ` ^block-id`. |
+| `gitsidian.tasks(md)` | `[{text, checked}]` from `- [ ]` / `- [x]` lines |
 | `gitsidian.family` | `small medium large extraLarge app`; branch on it |
 | `gitsidian.path` `.repo` `.branch` | |
 
 `kondai.widget()` is an alias. Kondai scripts work unchanged.
+
+## Checkboxes (tasks the user ticks on the Home Screen)
+A checkbox is bound to a markdown task line (`- [ ] text`) by its exact text. A tap flips that line's box and the phone commits it to the repo itself, so **expect commits from the phone to the files you write**: pull before you rewrite a widget file, and keep the user's ticks.
+- Tasks that live only in the widget: write them as markdown in a template string, one per line, no `${…}` in task text:
+  ```js
+  p.checklist(`
+  - [ ] Reply to Sam
+  - [x] Book flights
+  `);
+  ```
+- Tasks that live in a note: read the note, then bake each task in with its state and path: `p.checklist([{text: "Renew passport", checked: false, detail: "Fri"}], {note: "/Projects/Admin.md"})`. `note` must be the file's path (`.md` is added if there's no extension). The text must match the note's line exactly (without the `- [ ] `).
+- When the state changes in the note, rewrite the widget file so it shows the new state.
 
 ## Opening other apps
 `button(label, url)` and `list` rows with `url` can open any app that has a URL scheme or universal link. A tap goes through Gitsidian (it flashes briefly), which passes the URL on to iOS.

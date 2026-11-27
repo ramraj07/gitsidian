@@ -85,7 +85,8 @@ struct Provider: AppIntentTimelineProvider {
         }.value
         switch result {
         case .success(let program):
-            return WidgetEntry(date: now, content: .program(program, page: program.clampedPageNumber(store.pageNumber(record.id)), record: record))
+            let shown = store.applyingTaskState(program, record: record)
+            return WidgetEntry(date: now, content: .program(shown, page: shown.clampedPageNumber(store.pageNumber(record.id)), record: record))
         case .failure(let error):
             return WidgetEntry(date: now, content: .error(error.localizedDescription, record: record))
         }
@@ -101,6 +102,7 @@ struct GitsidianWidgetView: View {
             case .program(let program, let page, let record):
                 ProgramView(program: program, pageNumber: page)
                     .environment(\.widgetPageButton, pageButtons(record.id))
+                    .environment(\.widgetCheckbox, checkboxes(record.id))
                     .widgetURL(DeepLink.open(vault: record.vaultID, path: record.path))
             case .noFile:
                 StatusView(title: "No widget file yet", detail: "Add a .gitsidian.widget file to a vault in Gitsidian, then edit this widget to pick it.", symbol: "square.grid.2x2")
@@ -113,6 +115,15 @@ struct GitsidianWidgetView: View {
         }
         .padding(12)
         .containerBackground(.fill.tertiary, for: .widget)
+    }
+
+    private func checkboxes(_ id: String) -> CheckboxBuilder {
+        CheckboxBuilder { box in
+            AnyView(
+                Button(intent: ToggleTaskIntent(widgetID: id, box: box)) { CheckboxLabel(box: box) }
+                    .buttonStyle(.plain)
+            )
+        }
     }
 
     private func pageButtons(_ id: String) -> PageButtonBuilder {
@@ -151,6 +162,11 @@ enum RecordLoader {
     /// Offline or rate-limited: keeps the cached script.
     static func refreshed(_ record: WidgetRecord, now: Date, fetch: Bool) async -> WidgetRecord {
         var record = record
+        // Checkbox taps that couldn't be committed earlier (offline) go first, so the fetch below sees them.
+        if fetch, WidgetStore.shared.pendingToggles().contains(where: { $0.widgetID == record.id }) {
+            await TaskSync.flush()
+            record = WidgetStore.shared.record(id: record.id) ?? record
+        }
         if fetch, let token = Keychain.read(),
            case .found(let sha, let text)? = try? await RemoteFile.fetch(record, token: token), sha != record.baseSha {
             record.script = text

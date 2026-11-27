@@ -16,7 +16,7 @@ An iPhone app that opens a GitHub repository as an Obsidian-style vault. You bro
   - Back/forward navigation history. Reopens the last note.
   - Renaming a note updates `[[links]]` that point to it (can be turned off).
   - Images and PDFs can be viewed. Other files can be shared/opened in another app.
-- **Home-screen widgets.** Any `*.gitsidian.widget` file in a vault can be a Home Screen widget: a small JavaScript program (same API as [Kondai](https://github.com/ramraj07/kondai)) with pages, charts, canvas drawings, live timers and buttons that open notes. The widget pulls the file straight from GitHub, so a commit from an agent updates it. Live preview in the app. See [`docs/widgets.md`](docs/widgets.md); give agents [`docs/agent-manual.md`](docs/agent-manual.md).
+- **Home-screen widgets.** Any `*.gitsidian.widget` file in a vault can be a Home Screen widget: a small JavaScript program (same API as [Kondai](https://github.com/ramraj07/kondai)) with pages, charts, canvas drawings, live timers, buttons that open notes, and checkboxes that tick off markdown tasks and commit from the Home Screen. The widget pulls the file straight from GitHub, so a commit from an agent updates it. Live preview in the app. See [`docs/widgets.md`](docs/widgets.md); give agents [`docs/agent-manual.md`](docs/agent-manual.md).
 - **Lock Screen widgets.** A `*.gitsidian.lock` file is a Lock Screen widget (rectangular, circular, inline), with its own small API designed for that space: rings, gauges, live countdowns, sparklines and custom SVG. Agents can preview it with `node tools/lock-preview.mjs <file> --png out.png`. See [`docs/lockscreen.md`](docs/lockscreen.md).
 - **Sync as batched commits.**
   - Typing saves to disk right away. After you stop editing (default 30s), and whenever the app goes to the background, all changes go up as **one commit** (`vault backup: 2026-11-22 14:03 (3 files)` plus the list of files).
@@ -41,8 +41,8 @@ An iPhone app that opens a GitHub repository as an Obsidian-style vault. You bro
 | Widget script runtime (JavaScriptCore → SwiftUI, from Kondai) | `Shared/WidgetRuntime/` |
 | Lock Screen runtime, SVG renderer, starter template | `Shared/LockRuntime/` |
 | Lock Screen previewer for agents (Node) | `tools/lock-preview.mjs` |
-| App Group cache, deep links, shared Keychain token | `Shared/WidgetShared.swift`, `Shared/Keychain.swift` |
-| WidgetKit extension (file picker, GitHub refresh, page buttons) | `GitsidianWidget/` |
+| App Group cache, deep links, shared Keychain token, task lines | `Shared/WidgetShared.swift`, `Shared/Keychain.swift`, `Shared/TaskLines.swift` |
+| WidgetKit extension (file picker, GitHub refresh, page buttons, checkbox commits) | `GitsidianWidget/` |
 
 Each vault is a plain folder in the app's Application Support directory, plus a `state.json` holding the last synced commit, tree, and path→blob-sha map. Commits are built with the Git Data API (create blobs → create tree on `base_tree` → create commit → fast-forward the ref), so no git binary or libgit2 is needed. Commits are attributed to the token's GitHub user.
 
