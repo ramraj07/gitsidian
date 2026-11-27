@@ -17,6 +17,7 @@ final class VaultUI {
     var newFolderName = ""
     var newWidgetFolder: String?
     var newWidgetName = ""
+    var newWidgetLock = false
     var moving: String?
     var deleting: String?
 
@@ -24,14 +25,14 @@ final class VaultUI {
         let name = (path as NSString).lastPathComponent
         switch FileKind(path: path) {
         case .markdown: renameText = (name as NSString).deletingPathExtension
-        case .widget: renameText = WidgetFile.displayName(name)
+        case .widget, .lockWidget: renameText = WidgetFile.displayName(name)
         default: renameText = name
         }
         renaming = path
     }
     func startNewNote(in folder: String) { newNoteName = ""; newNoteFolder = folder }
     func startNewFolder(in parent: String) { newFolderName = ""; newFolderParent = parent }
-    func startNewWidget(in folder: String) { newWidgetName = ""; newWidgetFolder = folder }
+    func startNewWidget(in folder: String, lock: Bool = false) { newWidgetName = ""; newWidgetLock = lock; newWidgetFolder = folder }
 }
 
 extension Binding where Value == Bool {
@@ -123,17 +124,18 @@ struct VaultView: View {
         } message: {
             Text(ui.newNoteFolder.map { $0.isEmpty ? "In vault root" : "In \($0)" } ?? "")
         }
-        .alert("New widget", isPresented: Binding(present: $ui.newWidgetFolder)) {
+        .alert(ui.newWidgetLock ? "New Lock Screen widget" : "New widget", isPresented: Binding(present: $ui.newWidgetFolder)) {
             TextField("Widget", text: $ui.newWidgetName)
             Button("Create") {
                 let name = ui.newWidgetName.trimmingCharacters(in: .whitespaces)
-                if let p = session.createWidget(in: ui.newWidgetFolder ?? "", name: name.isEmpty ? nil : name) {
+                if let p = session.createWidget(in: ui.newWidgetFolder ?? "", name: name.isEmpty ? nil : name, lock: ui.newWidgetLock) {
                     session.open(p); ui.showSidebar = false
                 }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Creates a .gitsidian.widget file you can add to the Home Screen.")
+            Text(ui.newWidgetLock ? "Creates a .gitsidian.lock file you can add to the Lock Screen."
+                                  : "Creates a .gitsidian.widget file you can add to the Home Screen.")
         }
         .alert("New folder", isPresented: Binding(present: $ui.newFolderParent)) {
             TextField("Untitled", text: $ui.newFolderName)
@@ -181,7 +183,7 @@ struct VaultView: View {
         let name = (p as NSString).lastPathComponent
         switch FileKind(path: p) {
         case .markdown: return (name as NSString).deletingPathExtension
-        case .widget: return WidgetFile.displayName(name)
+        case .widget, .lockWidget: return WidgetFile.displayName(name)
         default: return name
         }
     }
@@ -219,6 +221,7 @@ struct VaultView: View {
             Button { Task { await session.sync() } } label: { Label("Sync now", systemImage: "arrow.triangle.2.circlepath") }
             Button { ui.showSearch = true } label: { Label("Search in all files", systemImage: "text.magnifyingglass") }
             Button { ui.startNewWidget(in: currentFolder) } label: { Label("New widget", systemImage: "square.grid.2x2") }
+            Button { ui.startNewWidget(in: currentFolder, lock: true) } label: { Label("New Lock Screen widget", systemImage: "lock.square") }
             if let p = session.currentPath {
                 Section {
                     Button { ui.startRename(p) } label: { Label("Rename", systemImage: "pencil") }

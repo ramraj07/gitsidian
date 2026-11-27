@@ -1,5 +1,9 @@
 # Publishing a Gitsidian widget (for agents)
 
+> This page is for **Home Screen** widgets (`*.gitsidian.widget`). **Lock Screen** widgets are a
+> separate file type (`*.gitsidian.lock`) with their own small API, SVG support and a previewer:
+> see [`lockscreen.md`](lockscreen.md).
+
 **Publish = commit a file named `<Name>.gitsidian.widget` to the vault repo's synced branch and push.**
 The phone's widget fetches it from GitHub on its next refresh (≈every `refreshAfter` minutes, iOS-throttled). To update it, overwrite the whole file and commit again. Keep the same path, because the user picked the widget by its path.
 

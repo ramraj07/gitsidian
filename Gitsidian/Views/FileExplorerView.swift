@@ -70,6 +70,7 @@ struct FileRow: View {
                     Button { ui.startNewNote(in: node.path) } label: { Label("New note", systemImage: "square.and.pencil") }
                     Button { ui.startNewFolder(in: node.path) } label: { Label("New folder", systemImage: "folder.badge.plus") }
                     Button { ui.startNewWidget(in: node.path) } label: { Label("New widget", systemImage: "square.grid.2x2") }
+                    Button { ui.startNewWidget(in: node.path, lock: true) } label: { Label("New Lock Screen widget", systemImage: "lock.square") }
                     Divider()
                     Button { ui.startRename(node.path) } label: { Label("Rename", systemImage: "pencil") }
                     Button { ui.moving = node.path } label: { Label("Move to…", systemImage: "folder") }
@@ -84,9 +85,9 @@ struct FileRow: View {
                 Label {
                     HStack {
                         Text(node.displayName).lineLimit(1)
-                        if node.isWidget {
+                        if node.isWidget || node.isLockWidget {
                             Spacer()
-                            Text("WIDGET").font(.caption2).foregroundStyle(.secondary)
+                            Text(node.isLockWidget ? "LOCK" : "WIDGET").font(.caption2).foregroundStyle(.secondary)
                                 .padding(.horizontal, 4).background(RoundedRectangle(cornerRadius: 3).fill(Color.secondary.opacity(0.12)))
                         } else if !node.isMarkdown {
                             Spacer()

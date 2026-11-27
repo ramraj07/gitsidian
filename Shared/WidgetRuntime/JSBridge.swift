@@ -10,6 +10,8 @@ import UIKit
 
 @objc protocol GitsidianExports: JSExport {
     func widget() -> WidgetJS
+    /// Lock Screen builder, for `*.gitsidian.lock` files.
+    func lockScreen() -> LockScreenJS
     /// URL that opens a vault file in Gitsidian; relative paths resolve against the widget file's folder.
     func note(_ path: JSValue?) -> String
     var path: String { get }
@@ -55,6 +57,7 @@ final class RuntimeState {
     let deadline: Date
     let now: Date
     var widget: WidgetJS?
+    var lock: LockScreenJS?
     var pages: [ContainerJS] = []
     var fullView: String?
     var refreshAfter: Double?
@@ -77,6 +80,12 @@ final class RuntimeState {
     func throwJS(_ message: String) {
         guard let ctx = JSContext.current() else { return }
         ctx.exception = JSValue(newErrorFromMessage: message, in: ctx)
+    }
+
+    func buildLock() -> LockProgram {
+        guard let lock else { return LockProgram() }
+        return LockProgram(circular: lock.circularFace, rectangular: lock.rectangularRows,
+                           inline: lock.inlineLine, refreshAfterMinutes: refreshAfter)
     }
 
     func build() -> WidgetProgram {
@@ -106,6 +115,13 @@ final class RuntimeState {
     func note(_ path: JSValue?) -> String {
         guard let raw = JSArgs.string(path), !raw.isEmpty else { return "" }
         return file.noteURL(raw)?.absoluteString ?? ""
+    }
+
+    func lockScreen() -> LockScreenJS {
+        if let l = state.lock { return l }
+        let l = LockScreenJS(state: state, file: file)
+        state.lock = l
+        return l
     }
 
     func widget() -> WidgetJS {
@@ -205,23 +221,7 @@ final class RuntimeState {
         guard let fn = draw, !fn.isUndefined, !fn.isNull else {
             return fail("canvas(): missing draw function")
         }
-        let size = CGSize(width: width, height: height)
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 3
-        format.opaque = false
-        let renderer = UIGraphicsImageRenderer(size: size, format: format)
-        var error: JSValue?
-        let png = renderer.pngData { rc in
-            let ctx = CanvasContextJS(cg: rc.cgContext, state: state)
-            let ctxValue = JSValue(object: ctx, in: fn.context)
-            fn.call(withArguments: [ctxValue as Any])
-            if let e = fn.context.exception { error = e }
-        }
-        if let error {
-            // Re-raise so the script fails loudly rather than drawing nothing.
-            fn.context.exception = error
-            return NodeJS(.spacer)
-        }
+        guard let png = CanvasRendering.png(width: width, height: height, draw: fn, state: state) else { return NodeJS(.spacer) }
         return add(.canvas(CanvasNode(png: png, width: width, height: height)))
     }
 
@@ -345,6 +345,31 @@ final class RuntimeState {
             }
         }
         return add(.chart(ChartSpec(type: type, data: points, color: JSArgs.string(s.forProperty("color")))))
+    }
+}
+
+// MARK: - Canvas rendering (shared with the Lock Screen runtime)
+
+enum CanvasRendering {
+    /// Runs `draw(ctx)` on a fresh 3x bitmap. nil when the draw function threw (the exception
+    /// is left on the context so the script fails loudly rather than drawing nothing).
+    static func png(width: Double, height: Double, draw fn: JSValue, state: RuntimeState) -> Data? {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 3
+        format.opaque = false
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: width, height: height), format: format)
+        var error: JSValue?
+        let png = renderer.pngData { rc in
+            let ctx = CanvasContextJS(cg: rc.cgContext, state: state)
+            let ctxValue = JSValue(object: ctx, in: fn.context)
+            fn.call(withArguments: [ctxValue as Any])
+            if let e = fn.context.exception { error = e }
+        }
+        if let error {
+            fn.context.exception = error
+            return nil
+        }
+        return png
     }
 }
 

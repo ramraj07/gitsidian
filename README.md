@@ -17,6 +17,7 @@ An iPhone app that opens a GitHub repository as an Obsidian-style vault. You bro
   - Renaming a note updates `[[links]]` that point to it (can be turned off).
   - Images and PDFs can be viewed. Other files can be shared/opened in another app.
 - **Home-screen widgets.** Any `*.gitsidian.widget` file in a vault can be a Home Screen widget: a small JavaScript program (same API as [Kondai](https://github.com/ramraj07/kondai)) with pages, charts, canvas drawings, live timers and buttons that open notes. The widget pulls the file straight from GitHub, so a commit from an agent updates it. Live preview in the app. See [`docs/widgets.md`](docs/widgets.md); give agents [`docs/agent-manual.md`](docs/agent-manual.md).
+- **Lock Screen widgets.** A `*.gitsidian.lock` file is a Lock Screen widget (rectangular, circular, inline), with its own small API designed for that space: rings, gauges, live countdowns, sparklines and custom SVG. Agents can preview it with `node tools/lock-preview.mjs <file> --png out.png`. See [`docs/lockscreen.md`](docs/lockscreen.md).
 - **Sync as batched commits.**
   - Typing saves to disk right away. After you stop editing (default 30s), and whenever the app goes to the background, all changes go up as **one commit** (`vault backup: 2026-11-22 14:03 (3 files)` plus the list of files).
   - Every sync first pulls. Remote changes to files you didn't touch are applied. When both sides edited the same file, a line-based **3-way merge** runs. If the same lines changed on both sides, the remote version wins the original path and your version is kept as `Note (conflict 2026-11-22 1403).md`. Nothing is ever silently lost.
@@ -38,6 +39,8 @@ An iPhone app that opens a GitHub repository as an Obsidian-style vault. You bro
 | Screens | `Gitsidian/Views/` |
 | Widget file preview / starter template | `Gitsidian/Widgets/`, `Shared/WidgetTemplate.swift` |
 | Widget script runtime (JavaScriptCore → SwiftUI, from Kondai) | `Shared/WidgetRuntime/` |
+| Lock Screen runtime, SVG renderer, starter template | `Shared/LockRuntime/` |
+| Lock Screen previewer for agents (Node) | `tools/lock-preview.mjs` |
 | App Group cache, deep links, shared Keychain token | `Shared/WidgetShared.swift`, `Shared/Keychain.swift` |
 | WidgetKit extension (file picker, GitHub refresh, page buttons) | `GitsidianWidget/` |
 

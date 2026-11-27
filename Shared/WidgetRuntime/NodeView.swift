@@ -209,13 +209,17 @@ struct RelativeDateText: View {
     let date: Date
 
     var body: some View {
+        Self.text(date).font(.body)
+    }
+
+    /// As a `Text`, so it can be joined with other text (Lock Screen inline widgets).
+    static func text(_ date: Date) -> Text {
         if #available(iOS 18.0, *) {
-            Text(.currentDate, format: .reference(to: date,
-                                                   allowedFields: [.year, .month, .week, .day, .hour, .minute],
-                                                   maxFieldCount: 1))
-                .font(.body)
+            return Text(.currentDate, format: .reference(to: date,
+                                                          allowedFields: [.year, .month, .week, .day, .hour, .minute],
+                                                          maxFieldCount: 1))
         } else {
-            Text(Self.fallback(date)).font(.body)
+            return Text(fallback(date))
         }
     }
 
